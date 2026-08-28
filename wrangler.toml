@@ -1,9 +1,0 @@
-name = "my-zibll-app"
-
-[site]
-bucket = "./dist"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "poen-db"
-database_id = "4bfe7de5-f6f3-4ba7-a247-29c7f6720fd1"
