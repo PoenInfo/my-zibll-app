@@ -477,10 +477,6 @@ export default function App() {
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
             <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>📧 帳號登入 / 註冊</h2>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-              管理員測試帳號：<code>admin@poenmail.eu.cc</code><br />
-              管理員預設密碼：<code>admin123</code>
-            </p>
             <form onSubmit={handleAuth}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={styles.label}>Email 電子郵件</label>
