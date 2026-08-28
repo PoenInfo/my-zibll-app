@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 
 interface User {
   email: string
+  password?: string
   username: string
   exp: number
   isAdmin?: boolean
@@ -23,9 +24,10 @@ interface Post {
   authorIsAdmin?: boolean
 }
 
-// 預設管理員與初始文章 (更新 Email 為 admin@poenmail.eu.cc)
+// 預設管理員與初始文章
 const ADMIN_USER: User = {
   email: 'admin@poenmail.eu.cc',
+  password: 'admin123', // 站長管理員預設密碼
   username: 'Poen (站長)',
   exp: 1500,
   isAdmin: true
@@ -34,14 +36,14 @@ const ADMIN_USER: User = {
 const INITIAL_POSTS: Post[] = [
   { 
     id: 1, 
-    title: '【子比主題】網站優化與極速部署教學', 
+    title: '【Poen主題】網站優化與極速部署教學', 
     category: 'tech', 
     date: '2026-08-28', 
     views: 1280, 
     likes: 96, 
     likedBy: [],
-    desc: '如何使用 Cloudflare Pages 與 React 打造極速回應的子比風格前端介面...', 
-    content: '這是子比主題的詳細教學內容。利用 React + Cloudflare Pages 可以實現毫秒級別的載入速度，並透過本地與遠端 API 完成全動態社群交互！',
+    desc: '如何使用 Cloudflare Pages 與 React 打造極速回應的 Poen 風格前端介面...', 
+    content: '這是 Poen 主題的詳細教學內容。利用 React + Cloudflare Pages 可以實現毫秒級別的載入速度，並透過本地與遠端 API 完成全動態社群交互！',
     authorEmail: 'admin@poenmail.eu.cc', 
     authorName: 'Poen (站長)',
     authorExp: 1500,
@@ -57,7 +59,7 @@ const INITIAL_POSTS: Post[] = [
     likedBy: [],
     desc: '探討 Vite、React 與現代化網頁建構工具的深度整合技巧。', 
     content: '前端生態系在 2026 年已經高度自動化。極簡、效能與模組化組件成為主流...',
-    authorEmail: 'dev@zibll.com', 
+    authorEmail: 'dev@poenmail.eu.cc', 
     authorName: '前端極客',
     authorExp: 250,
     authorIsAdmin: false
@@ -67,7 +69,7 @@ const INITIAL_POSTS: Post[] = [
 // 計算等級與頭銜邏輯
 const getLevelInfo = (exp: number, isAdmin?: boolean) => {
   if (isAdmin) return { level: 5, name: '👑 站長管理員', color: '#f59e0b', nextExp: 2000 }
-  if (exp >= 600) return { level: 4, name: 'LV4 子比達人', color: '#ec4899', nextExp: 1000 }
+  if (exp >= 600) return { level: 4, name: 'LV4 社群達人', color: '#ec4899', nextExp: 1000 }
   if (exp >= 300) return { level: 3, name: 'LV3 資深客官', color: '#a855f7', nextExp: 600 }
   if (exp >= 100) return { level: 2, name: 'LV2 漸入佳境', color: '#3b82f6', nextExp: 300 }
   return { level: 1, name: 'LV1 新手小白', color: '#10b981', nextExp: 100 }
@@ -78,13 +80,19 @@ export default function App() {
   
   // 登入會員系統 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('zibll_user_v4')
+    const saved = localStorage.getItem('poen_user_v5')
     return saved ? JSON.parse(saved) : ADMIN_USER // 預設登入站長
+  })
+
+  // 註冊用戶列表（用於模擬多使用者登入與密碼比對）
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('poen_users_db')
+    return saved ? JSON.parse(saved) : [ADMIN_USER]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('zibll_posts_v4')
+    const saved = localStorage.getItem('poen_posts_v5')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
@@ -93,6 +101,7 @@ export default function App() {
   const [profileUser, setProfileUser] = useState<User | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
   const [authUsername, setAuthUsername] = useState('')
 
   const [showPostModal, setShowPostModal] = useState(false)
@@ -100,14 +109,18 @@ export default function App() {
 
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('zibll_posts_v4', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v5', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
+    localStorage.setItem('poen_users_db', JSON.stringify(registeredUsers))
+  }, [registeredUsers])
+
+  useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('zibll_user_v4', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v5', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('zibll_user_v4')
+      localStorage.removeItem('poen_user_v5')
     }
   }, [currentUser])
 
@@ -117,30 +130,47 @@ export default function App() {
     const newExp = currentUser.exp + amount
     const updatedUser = { ...currentUser, exp: newExp }
     setCurrentUser(updatedUser)
+    
+    // 更新註冊用戶庫中的 EXP
+    setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
     alert(`🎉 ${reason}！經驗值 +${amount} (總計: ${newExp} EXP)`)
   }
 
-  // Email 註冊與登入
+  // Email + 密碼 註冊與登入
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault()
     if (!authEmail.includes('@')) return alert('請輸入有效的 Email 地址！')
-    
-    // 如果是管理員 Email
-    if (authEmail.toLowerCase() === 'admin@poenmail.eu.cc') {
-      setCurrentUser(ADMIN_USER)
-      alert('👑 歡迎站長管理員登入！')
+    if (!authPassword) return alert('請輸入密碼！')
+
+    const cleanEmail = authEmail.trim().toLowerCase()
+
+    // 檢查用戶是否已存在
+    const existingUser = registeredUsers.find(u => u.email.toLowerCase() === cleanEmail)
+
+    if (existingUser) {
+      // 驗證密碼
+      if (existingUser.password && existingUser.password !== authPassword) {
+        return alert('❌ 密碼錯誤！請重新輸入。')
+      }
+      setCurrentUser(existingUser)
+      alert(existingUser.isAdmin ? '👑 歡迎站長管理員登入！' : `👋 歡迎回來，${existingUser.username}！`)
     } else {
+      // 註冊新帳號
       const newUser: User = { 
-        email: authEmail, 
-        username: authUsername || authEmail.split('@')[0], 
+        email: cleanEmail, 
+        password: authPassword,
+        username: authUsername.trim() || cleanEmail.split('@')[0], 
         exp: 50,
         isAdmin: false
       }
+      setRegisteredUsers([...registeredUsers, newUser])
       setCurrentUser(newUser)
-      alert(`🎉 註冊/登入成功！獲得 50 初始 EXP！`)
+      alert(`🎉 註冊成功！獲得 50 初始 EXP！`)
     }
+
     setShowAuthModal(false)
     setAuthEmail('')
+    setAuthPassword('')
     setAuthUsername('')
   }
 
@@ -230,11 +260,11 @@ export default function App() {
 
   return (
     <div style={styles.container}>
-      {/* 頂部 Zibll 導航欄 */}
+      {/* 頂部 Poen 導航欄 */}
       <header style={styles.navbar}>
         <div style={styles.navContent}>
           <div style={styles.logo} onClick={() => setSelectedPost(null)}>
-            <span style={styles.logoBadge}>ZIBLL</span> Poen's Community
+            <span style={styles.logoBadge}>Poen</span> Poen's Community
           </div>
 
           <div style={styles.userSection}>
@@ -442,13 +472,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Email 註冊/登入 Modal */}
+      {/* Email + 密碼 註冊/登入 Modal */}
       {showAuthModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>📧 Email 帳號登入 / 註冊</h2>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>📧 帳號登入 / 註冊</h2>
             <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-              站長測試帳號 Email：<code>admin@poenmail.eu.cc</code>
+              管理員測試帳號：<code>admin@poenmail.eu.cc</code><br />
+              管理員預設密碼：<code>admin123</code>
             </p>
             <form onSubmit={handleAuth}>
               <div style={{ marginBottom: '1rem' }}>
@@ -462,8 +493,19 @@ export default function App() {
                   required 
                 />
               </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={styles.label}>密碼</label>
+                <input 
+                  type="password" 
+                  style={styles.input} 
+                  value={authPassword} 
+                  onChange={e => setAuthPassword(e.target.value)}
+                  placeholder="請輸入密碼"
+                  required 
+                />
+              </div>
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={styles.label}>會員暱稱 (選填)</label>
+                <label style={styles.label}>會員暱稱 (首次註冊填寫)</label>
                 <input 
                   type="text" 
                   style={styles.input} 
@@ -474,7 +516,7 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                 <button type="button" style={styles.cancelBtn} onClick={() => setShowAuthModal(false)}>取消</button>
-                <button type="submit" style={styles.submitBtn}>確認登入</button>
+                <button type="submit" style={styles.submitBtn}>確認登入 / 註冊</button>
               </div>
             </form>
           </div>
@@ -532,7 +574,7 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                 <button type="button" style={styles.cancelBtn} onClick={() => setShowPostModal(false)}>取消</button>
-                <button type="submit" style={styles.submitBtn}>靜態發布</button>
+                <button type="submit" style={styles.submitBtn}>立即發布</button>
               </div>
             </form>
           </div>
