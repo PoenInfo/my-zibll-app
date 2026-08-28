@@ -2,7 +2,6 @@ interface Env {
   DB: D1Database;
 }
 
-// GET: 獲取會員列表
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
     const { results } = await context.env.DB.prepare("SELECT * FROM users").all();
@@ -14,12 +13,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// POST: 註冊 / 更新會員資料
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const user: any = await context.request.json();
-    
-    // 檢查使用者是否存在，存在就更新，不存在就新增
     await context.env.DB.prepare(`
       INSERT INTO users (email, password, username, avatar, bio, role, location, ip, country, city, exp, isAdmin, isVerified, lastCheckInDate)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
