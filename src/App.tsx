@@ -5,7 +5,8 @@ interface User {
   password?: string
   username: string
   exp: number
-  isAdmin?: boolean
+  isAdmin?: boolean       // 是否為管理員
+  isVerified?: boolean    // 是否為官方認證
 }
 
 interface Post {
@@ -22,6 +23,7 @@ interface Post {
   authorName: string
   authorExp: number
   authorIsAdmin?: boolean
+  authorIsVerified?: boolean
 }
 
 interface Achievement {
@@ -38,10 +40,11 @@ const ADMIN_USER: User = {
   password: 'admin123',
   username: 'Poen (站長)',
   exp: 1500,
-  isAdmin: true
+  isAdmin: true,
+  isVerified: true
 }
 
-// 預設文章：點讚數與 likedBy 完全真實連動
+// 預設文章
 const INITIAL_POSTS: Post[] = [
   { 
     id: 1, 
@@ -52,11 +55,12 @@ const INITIAL_POSTS: Post[] = [
     likes: 1, 
     likedBy: ['dev@poenmail.eu.cc'],
     desc: '如何使用 Cloudflare Pages 與 React 打造極速回應的 Poen 風格前端介面...', 
-    content: '這是 Poen 主題的詳細教學內容。利用 React + Cloudflare Pages 可以實現毫秒級別的載入速度，並透過本地與遠端 API 完成全動態社群交互！',
+    content: '這是 Poen 主題的詳細教學內容。利用 React + Cloudflare Pages 可以實現毫秒級別的載入速度！',
     authorEmail: 'admin@poenmail.eu.cc', 
     authorName: 'Poen (站長)',
     authorExp: 1500,
-    authorIsAdmin: true
+    authorIsAdmin: true,
+    authorIsVerified: true
   },
   { 
     id: 2, 
@@ -71,13 +75,14 @@ const INITIAL_POSTS: Post[] = [
     authorEmail: 'dev@poenmail.eu.cc', 
     authorName: '前端極客',
     authorExp: 250,
-    authorIsAdmin: false
+    authorIsAdmin: false,
+    authorIsVerified: false
   },
 ]
 
-// 計算等級與頭銜邏輯
-const getLevelInfo = (exp: number, isAdmin?: boolean) => {
-  if (isAdmin) return { level: 5, name: 'LV5 站長', color: '#f59e0b', nextExp: 2000 }
+// 計算等級邏輯
+const getLevelInfo = (exp: number) => {
+  if (exp >= 1000) return { level: 5, name: 'LV5 站長', color: '#f59e0b', nextExp: 2000 }
   if (exp >= 600) return { level: 4, name: 'LV4 達人', color: '#ec4899', nextExp: 1000 }
   if (exp >= 300) return { level: 3, name: 'LV3 資深', color: '#a855f7', nextExp: 600 }
   if (exp >= 100) return { level: 2, name: 'LV2 新星', color: '#3b82f6', nextExp: 300 }
@@ -89,26 +94,26 @@ export default function App() {
   
   // 會員 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v7')
+    const saved = localStorage.getItem('poen_user_v8')
     return saved ? JSON.parse(saved) : ADMIN_USER
   })
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('poen_users_db_v7')
-    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', exp: 250, isAdmin: false }]
+    const saved = localStorage.getItem('poen_users_db_v8')
+    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', exp: 250, isAdmin: false, isVerified: false }]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('poen_posts_v7')
+    const saved = localStorage.getItem('poen_posts_v8')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
   // Modals 與 狀態控制
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [profileUser, setProfileUser] = useState<User | null>(null)
-  const [editingExp, setEditingExp] = useState<number>(0)
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false) // 後台開關
   
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authEmail, setAuthEmail] = useState('')
@@ -125,22 +130,22 @@ export default function App() {
 
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('poen_posts_v7', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v8', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
-    localStorage.setItem('poen_users_db_v7', JSON.stringify(registeredUsers))
+    localStorage.setItem('poen_users_db_v8', JSON.stringify(registeredUsers))
   }, [registeredUsers])
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('poen_user_v7', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v8', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('poen_user_v7')
+      localStorage.removeItem('poen_user_v8')
     }
   }, [currentUser])
 
-  // 計算成就解鎖邏輯
+  // 成就系統計算
   const getAchievements = (user: User | null): Achievement[] => {
     if (!user) return []
     const userPostsCount = posts.filter(p => p.authorEmail === user.email).length
@@ -150,7 +155,7 @@ export default function App() {
       { id: '1', title: '初來乍到', desc: '成功註冊並登入 Poen 社群', icon: '🎖️', unlocked: true },
       { id: '2', title: '筆耕不輟', desc: '成功發布至少 1 篇文章', icon: '✍️', unlocked: userPostsCount >= 1 },
       { id: '3', title: '熱心交流', desc: '給予文章 3 次以上的點讚', icon: '🎉', unlocked: userLikesGivenCount >= 3 },
-      { id: '4', title: '社群核心', desc: '等級達到 LV3 以上或成為管理員', icon: '👑', unlocked: user.isAdmin || user.exp >= 300 }
+      { id: '4', title: '社群核心', desc: '等級達到 LV3 以上或成為管理員', icon: '👑', unlocked: !!user.isAdmin || user.exp >= 300 }
     ]
   }
 
@@ -178,14 +183,15 @@ export default function App() {
         return alert('❌ 密碼錯誤！請重新輸入。')
       }
       setCurrentUser(existingUser)
-      alert(existingUser.isAdmin ? '👑 歡迎站長管理員登入！' : `👋 歡迎回來，${existingUser.username}！`)
+      alert(existingUser.isAdmin ? '👑 歡迎站長登入管理員後台！' : `👋 歡迎回來，${existingUser.username}！`)
     } else {
       const newUser: User = { 
         email: cleanEmail, 
         password: authPassword,
         username: authUsername.trim() || cleanEmail.split('@')[0], 
         exp: 50,
-        isAdmin: false
+        isAdmin: false,
+        isVerified: false
       }
       setRegisteredUsers([...registeredUsers, newUser])
       setCurrentUser(newUser)
@@ -198,14 +204,13 @@ export default function App() {
     setAuthUsername('')
   }
 
-  // 發布或編輯文章
+  // 發布/編輯文章
   const handleSavePost = (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentUser) return alert('請先登入帳號！')
     if (!formData.title.trim()) return alert('請輸入標題！')
 
     if (editingPostId) {
-      // 編輯文章邏輯
       const updated = posts.map(p => {
         if (p.id === editingPostId) {
           return {
@@ -230,7 +235,6 @@ export default function App() {
       }
       alert('✏️ 文章修改成功！')
     } else {
-      // 新增文章邏輯
       const newPost: Post = {
         id: Date.now(),
         title: formData.title,
@@ -245,6 +249,7 @@ export default function App() {
         authorName: currentUser.username,
         authorExp: currentUser.exp,
         authorIsAdmin: currentUser.isAdmin,
+        authorIsVerified: currentUser.isVerified,
       }
       setPosts([newPost, ...posts])
       addExp(50, '成功發布文章')
@@ -255,17 +260,12 @@ export default function App() {
     setFormData({ title: '', category: 'tech', desc: '', content: '' })
   }
 
-  // 開啟編輯視窗
-  const openEditModal = (post: Post, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation()
-    setEditingPostId(post.id)
-    setFormData({
-      title: post.title,
-      category: post.category,
-      desc: post.desc,
-      content: post.content
-    })
-    setShowPostModal(true)
+  // 文章刪除 (管理員或作者)
+  const handleDeletePost = (id: number) => {
+    if (!confirm('⚠️ 確定要刪除這篇文章嗎？此操作無法恢復！')) return
+    setPosts(posts.filter(p => p.id !== id))
+    if (selectedPost?.id === id) setSelectedPost(null)
+    alert('🗑️ 文章已成功刪除！')
   }
 
   // 點讚機制
@@ -299,46 +299,36 @@ export default function App() {
     addExp(10, '文章點讚互動')
   }
 
-  // 管理員權限：修改使用者身份/經驗值
-  const handleToggleAdminStatus = (targetEmail: string) => {
-    if (!currentUser?.isAdmin) return
-    if (targetEmail === currentUser.email) return alert('無法變更自己的權限！')
-
-    const updatedUsers = registeredUsers.map(u => {
-      if (u.email === targetEmail) {
-        return { ...u, isAdmin: !u.isAdmin }
-      }
+  // 【管理員後台功能】切換使用者管理員權限
+  const toggleUserAdmin = (email: string) => {
+    setRegisteredUsers(prev => prev.map(u => {
+      if (u.email === email) return { ...u, isAdmin: !u.isAdmin }
       return u
-    })
-    setRegisteredUsers(updatedUsers)
-    if (profileUser && profileUser.email === targetEmail) {
-      setProfileUser({ ...profileUser, isAdmin: !profileUser.isAdmin })
-    }
-    alert('✅ 使用者權限設定已成功更新！')
+    }))
   }
 
-  const handleUpdateUserExp = (targetEmail: string) => {
-    if (!currentUser?.isAdmin) return
-    const updatedUsers = registeredUsers.map(u => {
-      if (u.email === targetEmail) {
-        return { ...u, exp: Number(editingExp) }
-      }
+  // 【管理員後台功能】切換使用者官方認證
+  const toggleUserVerified = (email: string) => {
+    setRegisteredUsers(prev => prev.map(u => {
+      if (u.email === email) return { ...u, isVerified: !u.isVerified }
       return u
-    })
-    setRegisteredUsers(updatedUsers)
-    if (profileUser && profileUser.email === targetEmail) {
-      setProfileUser({ ...profileUser, exp: Number(editingExp) })
-    }
-    alert('✅ 使用者經驗值已更動！')
+    }))
+  }
+
+  // 【管理員後台功能】調整經驗值
+  const updateUserExp = (email: string, newExp: number) => {
+    setRegisteredUsers(prev => prev.map(u => {
+      if (u.email === email) return { ...u, exp: newExp }
+      return u
+    }))
   }
 
   const openAuthorProfile = (email: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
     const target = registeredUsers.find(u => u.email === email) || {
-      email, username: '未知用戶', exp: 0, isAdmin: false
+      email, username: '未知用戶', exp: 0, isAdmin: false, isVerified: false
     }
     setProfileUser(target)
-    setEditingExp(target.exp)
   }
 
   const openPostDetail = (post: Post) => {
@@ -351,20 +341,29 @@ export default function App() {
     ? posts 
     : posts.filter(p => p.category === activeTab)
 
-  const currentUserLevel = currentUser ? getLevelInfo(currentUser.exp, currentUser.isAdmin) : null
+  const currentUserLevel = currentUser ? getLevelInfo(currentUser.exp) : null
 
   return (
     <div style={styles.container}>
-      {/* 頂部導航 */}
+      {/* 頂部導覽列 */}
       <header style={styles.navbar}>
         <div style={styles.navContent}>
-          <div style={styles.logo} onClick={() => setSelectedPost(null)}>
+          <div style={styles.logo} onClick={() => { setSelectedPost(null); setShowAdminDashboard(false); }}>
             <span style={styles.logoBadge}>Poen</span> Poen's Community
           </div>
 
           <div style={styles.userSection}>
             {currentUser ? (
               <div style={styles.userInfo}>
+                {/* 管理員專用後台按鈕 */}
+                {currentUser.isAdmin && (
+                  <button 
+                    style={{ ...styles.adminDashboardBtn, backgroundColor: showAdminDashboard ? '#d97706' : '#f59e0b' }} 
+                    onClick={() => { setShowAdminDashboard(!showAdminDashboard); setSelectedPost(null); }}
+                  >
+                    ⚙️ 管理員後台
+                  </button>
+                )}
                 <button style={styles.achieveBtn} onClick={() => setShowAchievementModal(true)}>
                   🏆 成就
                 </button>
@@ -375,7 +374,9 @@ export default function App() {
                   {currentUserLevel?.name}
                 </span>
                 <span style={styles.userName} onClick={() => openAuthorProfile(currentUser.email)}>
-                  {currentUser.username} {currentUser.isAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
+                  {currentUser.username}
+                  {currentUser.isAdmin && <span style={styles.adminRoleBadge} title="管理員">👑 管理員</span>}
+                  {currentUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
                 </span>
                 <button 
                   style={styles.createBtn} 
@@ -387,7 +388,7 @@ export default function App() {
                 >
                   ✏️ 發文
                 </button>
-                <button style={styles.logoutBtn} onClick={() => { setCurrentUser(null); alert('已成功登出！'); }}>登出</button>
+                <button style={styles.logoutBtn} onClick={() => { setCurrentUser(null); setShowAdminDashboard(false); alert('已成功登出！'); }}>登出</button>
               </div>
             ) : (
               <button style={styles.loginBtn} onClick={() => setShowAuthModal(true)}>
@@ -400,15 +401,125 @@ export default function App() {
 
       {/* 主要區域 */}
       <main style={styles.main}>
-        {selectedPost ? (
-          /* 文章內頁 */
+        {showAdminDashboard && currentUser?.isAdmin ? (
+          /* ================= 管理員獨立後台 Dashboard ================= */
+          <div style={styles.dashboardContainer}>
+            <div style={styles.dashboardHeader}>
+              <h1 style={{ margin: 0, color: '#f59e0b' }}>⚙️ 管理員控制台</h1>
+              <button style={styles.backBtn} onClick={() => setShowAdminDashboard(false)}>← 返回社群前台</button>
+            </div>
+
+            {/* 後台數據統計卡片 */}
+            <div style={styles.statsGrid}>
+              <div style={styles.statCard}>
+                <div style={styles.statTitle}>總註冊用戶</div>
+                <div style={styles.statValue}>{registeredUsers.length} 人</div>
+              </div>
+              <div style={styles.statCard}>
+                <div style={styles.statTitle}>總文章發表</div>
+                <div style={styles.statValue}>{posts.length} 篇</div>
+              </div>
+              <div style={styles.statCard}>
+                <div style={styles.statTitle}>官方認證用戶</div>
+                <div style={styles.statValue}>{registeredUsers.filter(u => u.isVerified).length} 人</div>
+              </div>
+            </div>
+
+            {/* 後台會員管理 */}
+            <section style={styles.adminSection}>
+              <h2 style={styles.sectionTitle}>👥 會員權限與認證管理</h2>
+              <table style={styles.adminTable}>
+                <thead>
+                  <tr style={styles.tableHeader}>
+                    <th>用戶暱稱</th>
+                    <th>Email 帳號</th>
+                    <th>經驗值 (EXP)</th>
+                    <th>管理員身分</th>
+                    <th>官方認證</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registeredUsers.map(user => (
+                    <tr key={user.email} style={styles.tableRow}>
+                      <td style={{ fontWeight: 'bold' }}>{user.username}</td>
+                      <td style={{ color: '#94a3b8' }}>{user.email}</td>
+                      <td>
+                        <input 
+                          type="number" 
+                          style={styles.tableInput} 
+                          defaultValue={user.exp} 
+                          onBlur={(e) => updateUserExp(user.email, Number(e.target.value))}
+                        />
+                      </td>
+                      <td>
+                        <button 
+                          style={{ ...styles.toggleBtn, backgroundColor: user.isAdmin ? '#f59e0b' : '#334155' }}
+                          onClick={() => toggleUserAdmin(user.email)}
+                        >
+                          {user.isAdmin ? '👑 管理員' : '一般用戶'}
+                        </button>
+                      </td>
+                      <td>
+                        <button 
+                          style={{ ...styles.toggleBtn, backgroundColor: user.isVerified ? '#0284c7' : '#334155' }}
+                          onClick={() => toggleUserVerified(user.email)}
+                        >
+                          {user.isVerified ? '☑️ 已認證' : '未認證'}
+                        </button>
+                      </td>
+                      <td>
+                        <button style={styles.smallBtn} onClick={() => openAuthorProfile(user.email)}>查看名片</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+
+            {/* 後台文章管理 */}
+            <section style={styles.adminSection}>
+              <h2 style={styles.sectionTitle}>📝 文章全站管理</h2>
+              <table style={styles.adminTable}>
+                <thead>
+                  <tr style={styles.tableHeader}>
+                    <th>文章標題</th>
+                    <th>作者</th>
+                    <th>發布日期</th>
+                    <th>觀看 / 點讚</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {posts.map(post => (
+                    <tr key={post.id} style={styles.tableRow}>
+                      <td>{post.title}</td>
+                      <td>{post.authorName}</td>
+                      <td style={{ color: '#94a3b8' }}>{post.date}</td>
+                      <td>👁️ {post.views} / 👍 {post.likes}</td>
+                      <td>
+                        <button style={styles.dangerBtn} onClick={() => handleDeletePost(post.id)}>刪除文章</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </div>
+        ) : selectedPost ? (
+          /* ================= 文章內頁 ================= */
           <article style={styles.detailCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button style={styles.backBtn} onClick={() => setSelectedPost(null)}>← 返回文章列表</button>
               {(currentUser?.isAdmin || currentUser?.email === selectedPost.authorEmail) && (
-                <button style={styles.editBtn} onClick={(e) => openEditModal(selectedPost, e)}>
-                  ✏️ 編輯文章
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button style={styles.editBtn} onClick={() => {
+                    setEditingPostId(selectedPost.id)
+                    setFormData({ title: selectedPost.title, category: selectedPost.category, desc: selectedPost.desc, content: selectedPost.content })
+                    setShowPostModal(true)
+                  }}>✏️ 編輯文章</button>
+                  <button style={styles.dangerBtn} onClick={() => handleDeletePost(selectedPost.id)}>🗑️ 刪除</button>
+                </div>
               )}
             </div>
             
@@ -422,11 +533,12 @@ export default function App() {
             <div style={styles.authorBar} onClick={(e) => openAuthorProfile(selectedPost.authorEmail, e)}>
               <div style={styles.authorAvatar}>{selectedPost.authorName.charAt(0)}</div>
               <div>
-                <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold', color: '#f1f5f9' }}>{selectedPost.authorName}</span>
-                  {selectedPost.authorIsAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
-                  <span style={{ ...styles.levelBadgeMini, backgroundColor: getLevelInfo(selectedPost.authorExp, selectedPost.authorIsAdmin).color }}>
-                    {getLevelInfo(selectedPost.authorExp, selectedPost.authorIsAdmin).name}
+                  {selectedPost.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                  {selectedPost.authorIsVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
+                  <span style={{ ...styles.levelBadgeMini, backgroundColor: getLevelInfo(selectedPost.authorExp).color }}>
+                    {getLevelInfo(selectedPost.authorExp).name}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{selectedPost.authorEmail}</div>
@@ -450,14 +562,16 @@ export default function App() {
             </div>
           </article>
         ) : (
-          /* 文章列表頁 */
+          /* ================= 文章列表頁 ================= */
           <>
             {currentUser && currentUserLevel && (
               <section style={styles.userCard}>
                 <div style={styles.userCardHeader}>
                   <div>
-                    <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
-                      👋 歡迎回來，{currentUser.username} {currentUser.isAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
+                    <h2 style={{ margin: 0, fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      👋 歡迎回來，{currentUser.username}
+                      {currentUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                      {currentUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
                     </h2>
                     <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.9rem' }}>
                       帳號 Email：{currentUser.email}
@@ -492,22 +606,14 @@ export default function App() {
 
             <div style={styles.postList}>
               {filteredPosts.map(post => {
-                const authorLvl = getLevelInfo(post.authorExp, post.authorIsAdmin)
+                const authorLvl = getLevelInfo(post.authorExp)
                 const isLiked = currentUser && post.likedBy.includes(currentUser.email)
-                const canEdit = currentUser?.isAdmin || currentUser?.email === post.authorEmail
 
                 return (
                   <article key={post.id} style={styles.postCard} onClick={() => openPostDetail(post)}>
                     <div style={styles.cardHeader}>
                       <span style={styles.postCategory}>{post.category === 'tech' ? '技術' : '生活'}</span>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {canEdit && (
-                          <button style={styles.smallEditBtn} onClick={(e) => openEditModal(post, e)}>
-                            ✏️ 編輯
-                          </button>
-                        )}
-                        <span style={styles.postDate}>{post.date}</span>
-                      </div>
+                      <span style={styles.postDate}>{post.date}</span>
                     </div>
 
                     <h2 style={styles.postTitle}>{post.title}</h2>
@@ -518,7 +624,9 @@ export default function App() {
                         {authorLvl.name}
                       </span>
                       <span style={styles.authorName}>
-                        ✍️ {post.authorName} {post.authorIsAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
+                        ✍️ {post.authorName}
+                        {post.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                        {post.authorIsVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
                       </span>
                     </div>
 
@@ -544,7 +652,32 @@ export default function App() {
         )}
       </main>
 
-      {/* 成就系統 Modal */}
+      {/* 使用者名片 Modal */}
+      {profileUser && (
+        <div style={styles.modalOverlay} onClick={() => setProfileUser(null)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>👤 會員名片</h2>
+            <div style={{ textAlign: 'center', margin: '1.2rem 0' }}>
+              <div style={styles.profileAvatarBig}>{profileUser.username.charAt(0)}</div>
+              <h3 style={{ color: '#fff', margin: '0.5rem 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
+                {profileUser.username}
+                {profileUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                {profileUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
+              </h3>
+              <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{profileUser.email}</p>
+              <span style={{ ...styles.levelBadgeBig, backgroundColor: getLevelInfo(profileUser.exp).color, display: 'inline-block', marginTop: '0.5rem' }}>
+                {getLevelInfo(profileUser.exp).name}
+              </span>
+              <div style={{ color: '#cbd5e1', marginTop: '0.8rem', fontSize: '0.9rem' }}>
+                累積經驗值：<strong>{profileUser.exp} EXP</strong>
+              </div>
+            </div>
+            <button style={{ ...styles.submitBtn, width: '100%' }} onClick={() => setProfileUser(null)}>關閉名片</button>
+          </div>
+        </div>
+      )}
+
+      {/* 成就 Modal */}
       {showAchievementModal && currentUser && (
         <div style={styles.modalOverlay} onClick={() => setShowAchievementModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
@@ -563,54 +696,6 @@ export default function App() {
               ))}
             </div>
             <button style={{ ...styles.submitBtn, width: '100%' }} onClick={() => setShowAchievementModal(false)}>關閉成就</button>
-          </div>
-        </div>
-      )}
-
-      {/* 使用者名片 Modal */}
-      {profileUser && (
-        <div style={styles.modalOverlay} onClick={() => setProfileUser(null)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>👤 會員名片</h2>
-            <div style={{ textAlign: 'center', margin: '1.2rem 0' }}>
-              <div style={styles.profileAvatarBig}>{profileUser.username.charAt(0)}</div>
-              <h3 style={{ color: '#fff', margin: '0.5rem 0' }}>
-                {profileUser.username} {profileUser.isAdmin && <span style={styles.officialBadge}>☑️ 官方</span>}
-              </h3>
-              <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{profileUser.email}</p>
-              <span style={{ ...styles.levelBadgeBig, backgroundColor: getLevelInfo(profileUser.exp, profileUser.isAdmin).color, display: 'inline-block', marginTop: '0.5rem' }}>
-                {getLevelInfo(profileUser.exp, profileUser.isAdmin).name}
-              </span>
-              <div style={{ color: '#cbd5e1', marginTop: '0.8rem', fontSize: '0.9rem' }}>
-                累積經驗值：<strong>{profileUser.exp} EXP</strong>
-              </div>
-            </div>
-
-            {/* 管理員人員控制面板 */}
-            {currentUser?.isAdmin && profileUser.email !== currentUser.email && (
-              <div style={styles.adminPanel}>
-                <h4 style={{ margin: '0 0 0.5rem 0', color: '#f59e0b' }}>⚙️ 管理員權限控制</h4>
-                <button 
-                  style={{ ...styles.adminBtn, backgroundColor: profileUser.isAdmin ? '#ef4444' : '#10b981' }}
-                  onClick={() => handleToggleAdminStatus(profileUser.email)}
-                >
-                  {profileUser.isAdmin ? '取消管理員身份' : '升級為官方管理員'}
-                </button>
-
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <input 
-                    type="number" 
-                    style={styles.input} 
-                    value={editingExp} 
-                    onChange={e => setEditingExp(Number(e.target.value))} 
-                    placeholder="調整 EXP"
-                  />
-                  <button style={styles.submitBtn} onClick={() => handleUpdateUserExp(profileUser.email)}>更新 EXP</button>
-                </div>
-              </div>
-            )}
-
-            <button style={{ ...styles.submitBtn, width: '100%', marginTop: '1rem' }} onClick={() => setProfileUser(null)}>關閉名片</button>
           </div>
         </div>
       )}
@@ -642,7 +727,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 發布 / 編輯文章 Modal */}
+      {/* 文章 Modal */}
       {showPostModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
@@ -685,21 +770,39 @@ const styles: { [key: string]: React.CSSProperties } = {
   navContent: { maxWidth: '1100px', margin: '0 auto', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   logo: { fontSize: '1.2rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' },
   logoBadge: { backgroundColor: '#2563eb', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.85rem' },
-  officialBadge: { backgroundColor: '#0284c7', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' },
-  miniBadge: { fontSize: '0.8rem', cursor: 'pointer' },
+  adminRoleBadge: { backgroundColor: '#d97706', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' },
+  verifiedIcon: { fontSize: '0.85rem' },
   userSection: { display: 'flex', alignItems: 'center' },
   userInfo: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' },
+  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' },
   levelBadge: { color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
   levelBadgeMini: { color: '#fff', fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '10px', fontWeight: 'bold' },
   levelBadgeBig: { color: '#fff', fontSize: '0.85rem', padding: '0.3rem 0.8rem', borderRadius: '20px', fontWeight: 'bold' },
+  adminDashboardBtn: { backgroundColor: '#f59e0b', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   achieveBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   loginBtn: { backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' },
   logoutBtn: { backgroundColor: '#334155', color: '#94a3b8', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' },
   createBtn: { backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' },
   editBtn: { backgroundColor: '#f59e0b', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' },
-  smallEditBtn: { backgroundColor: '#334155', color: '#38bdf8', border: 'none', padding: '0.2rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
+  dangerBtn: { backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' },
   main: { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' },
+  
+  // 管理員後台樣式
+  dashboardContainer: { display: 'flex', flexDirection: 'column', gap: '2rem' },
+  dashboardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' },
+  statCard: { backgroundColor: '#161b26', border: '1px solid #222d3d', borderRadius: '12px', padding: '1.2rem' },
+  statTitle: { color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.5rem' },
+  statValue: { color: '#f1f5f9', fontSize: '1.8rem', fontWeight: 'bold' },
+  adminSection: { backgroundColor: '#161b26', border: '1px solid #222d3d', borderRadius: '12px', padding: '1.5rem' },
+  sectionTitle: { margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#f1f5f9' },
+  adminTable: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' },
+  tableHeader: { borderBottom: '1px solid #334155', color: '#94a3b8' },
+  tableRow: { borderBottom: '1px solid #1e293b' },
+  tableInput: { width: '70px', padding: '0.2rem 0.4rem', backgroundColor: '#0c1017', border: '1px solid #334155', color: '#fff', borderRadius: '4px' },
+  toggleBtn: { border: 'none', color: '#fff', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
+  smallBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
+
   userCard: { backgroundColor: '#161b26', border: '1px solid #222d3d', borderRadius: '16px', padding: '1.5rem', marginBottom: '2rem' },
   userCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
   progressBg: { width: '100%', height: '8px', backgroundColor: '#1e293b', borderRadius: '4px', overflow: 'hidden' },
@@ -712,7 +815,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' },
   postCategory: { backgroundColor: '#1e293b', color: '#38bdf8', fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '4px' },
   authorLevelBadge: { color: '#fff', fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 'bold' },
-  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' },
+  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' },
   cardAuthorRow: { display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', cursor: 'pointer' },
   postDate: { fontSize: '0.8rem', color: '#64748b' },
   postTitle: { fontSize: '1.15rem', fontWeight: '700', margin: '0 0 0.5rem 0', color: '#f1f5f9' },
@@ -730,8 +833,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   modalContent: { backgroundColor: '#161b26', border: '1px solid #334155', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '450px' },
   achieveCard: { backgroundColor: '#0c1017', border: '1px solid #222d3d', padding: '0.75rem 1rem', borderRadius: '10px', display: 'flex', gap: '1rem', alignItems: 'center' },
   profileAvatarBig: { width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#2563eb', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.8rem', margin: '0 auto' },
-  adminPanel: { marginTop: '1rem', padding: '1rem', backgroundColor: '#0c1017', borderRadius: '10px', border: '1px dashed #f59e0b' },
-  adminBtn: { width: '100%', padding: '0.5rem', border: 'none', color: '#fff', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' },
   label: { display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' },
   input: { width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#0c1017', color: '#fff', boxSizing: 'border-box' },
   cancelBtn: { backgroundColor: '#1e293b', color: '#94a3b8', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer' },
