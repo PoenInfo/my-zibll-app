@@ -4,6 +4,7 @@ interface Env {
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
+    // 完整查詢使用者資料（包含 IP），讓個人資料頁面可以正常顯示
     const { results } = await context.env.DB.prepare("SELECT * FROM users").all();
     return new Response(JSON.stringify(results), {
       headers: { "content-type": "application/json;charset=UTF-8" },
