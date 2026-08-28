@@ -4,9 +4,12 @@ interface User {
   email: string
   password?: string
   username: string
+  bio?: string             // 個人簡介
   exp: number
-  isAdmin?: boolean       // 是否為管理員
-  isVerified?: boolean    // 是否為官方認證
+  isAdmin?: boolean        // 是否為管理員
+  isVerified?: boolean     // 是否為官方認證 (FB 藍勾)
+  lastCheckInDate?: string // 上次簽到日期
+  appliedVerification?: boolean // 是否已申請認證
 }
 
 interface Post {
@@ -39,6 +42,7 @@ const ADMIN_USER: User = {
   email: 'admin@poenmail.eu.cc',
   password: 'admin123',
   username: 'Poen (站長)',
+  bio: 'Poen 社群創辦人兼站長，歡迎大家交流討論！',
   exp: 1500,
   isAdmin: true,
   isVerified: true
@@ -80,45 +84,64 @@ const INITIAL_POSTS: Post[] = [
   },
 ]
 
-// 計算等級邏輯
-const getLevelInfo = (exp: number) => {
-  if (exp >= 1000) return { level: 5, name: 'LV5 站長', color: '#f59e0b', nextExp: 2000 }
-  if (exp >= 600) return { level: 4, name: 'LV4 達人', color: '#ec4899', nextExp: 1000 }
-  if (exp >= 300) return { level: 3, name: 'LV3 資深', color: '#a855f7', nextExp: 600 }
-  if (exp >= 100) return { level: 2, name: 'LV2 新星', color: '#3b82f6', nextExp: 300 }
-  return { level: 1, name: 'LV1 新手', color: '#10b981', nextExp: 100 }
-}
+// FB 風格的官方藍勾認證組件
+const FbVerifiedBadge = ({ size = '16px' }: { size?: string }) => (
+  <span 
+    title="官方認證帳號" 
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#0866ff',
+      color: '#ffffff',
+      borderRadius: '50%',
+      width: size,
+      height: size,
+      fontSize: `calc(${size} * 0.65)`,
+      fontWeight: 'bold',
+      lineHeight: 1,
+      userSelect: 'none',
+      flexShrink: 0
+    }}
+  >
+    ✓
+  </span>
+)
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('all')
   
   // 會員 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v8')
+    const saved = localStorage.getItem('poen_user_v9')
     return saved ? JSON.parse(saved) : ADMIN_USER
   })
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('poen_users_db_v8')
-    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', exp: 250, isAdmin: false, isVerified: false }]
+    const saved = localStorage.getItem('poen_users_db_v9')
+    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', bio: '專注前端開發與使用者體驗設計', exp: 250, isAdmin: false, isVerified: false }]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('poen_posts_v8')
+    const saved = localStorage.getItem('poen_posts_v9')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
-  // Modals 與 狀態控制
+  // Modals 與 頁面視圖控制
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [profileUser, setProfileUser] = useState<User | null>(null)
-  const [showAdminDashboard, setShowAdminDashboard] = useState(false) // 後台開關
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false) 
+  const [showUserCenter, setShowUserCenter] = useState(false) // 個人使用者中心 Modal
   
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authUsername, setAuthUsername] = useState('')
+
+  // 個人簡介編輯 State
+  const [editBioText, setEditBioText] = useState('')
 
   // 文章新增/編輯 Modal
   const [showPostModal, setShowPostModal] = useState(false)
@@ -130,18 +153,18 @@ export default function App() {
 
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('poen_posts_v8', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v9', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
-    localStorage.setItem('poen_users_db_v8', JSON.stringify(registeredUsers))
+    localStorage.setItem('poen_users_db_v9', JSON.stringify(registeredUsers))
   }, [registeredUsers])
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('poen_user_v8', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v9', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('poen_user_v8')
+      localStorage.removeItem('poen_user_v9')
     }
   }, [currentUser])
 
@@ -153,9 +176,10 @@ export default function App() {
 
     return [
       { id: '1', title: '初來乍到', desc: '成功註冊並登入 Poen 社群', icon: '🎖️', unlocked: true },
-      { id: '2', title: '筆耕不輟', desc: '成功發布至少 1 篇文章', icon: '✍️', unlocked: userPostsCount >= 1 },
-      { id: '3', title: '熱心交流', desc: '給予文章 3 次以上的點讚', icon: '🎉', unlocked: userLikesGivenCount >= 3 },
-      { id: '4', title: '社群核心', desc: '等級達到 LV3 以上或成為管理員', icon: '👑', unlocked: !!user.isAdmin || user.exp >= 300 }
+      { id: '2', title: '持之以恆', desc: '完成至少 1 次每日簽到', icon: '📅', unlocked: !!user.lastCheckInDate },
+      { id: '3', title: '筆耕不輟', desc: '成功發布至少 1 篇文章', icon: '✍️', unlocked: userPostsCount >= 1 },
+      { id: '4', title: '熱心交流', desc: '給予文章 3 次以上的點讚', icon: '🎉', unlocked: userLikesGivenCount >= 3 },
+      { id: '5', title: '藍勾認證', desc: '獲得官方 Facebook 風格藍勾認證', icon: '🟦', unlocked: !!user.isVerified }
     ]
   }
 
@@ -167,6 +191,45 @@ export default function App() {
     setCurrentUser(updatedUser)
     setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
     alert(`🎉 ${reason}！經驗值 +${amount} (總計: ${newExp} EXP)`)
+  }
+
+  // 每日簽到機制
+  const handleCheckIn = () => {
+    if (!currentUser) return
+    const today = new Date().toISOString().split('T')[0]
+    if (currentUser.lastCheckInDate === today) {
+      return alert('📅 您今天已經完成簽到了，明天再來吧！')
+    }
+
+    const updatedUser = {
+      ...currentUser,
+      exp: currentUser.exp + 20,
+      lastCheckInDate: today
+    }
+    setCurrentUser(updatedUser)
+    setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
+    alert('✅ 簽到成功！獲得 +20 EXP！')
+  }
+
+  // 保存個人簡介
+  const handleSaveBio = () => {
+    if (!currentUser) return
+    const updatedUser = { ...currentUser, bio: editBioText }
+    setCurrentUser(updatedUser)
+    setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
+    alert('✅ 個人簡介已成功更新！')
+  }
+
+  // 申請官方藍勾認證
+  const handleApplyVerification = () => {
+    if (!currentUser) return
+    if (currentUser.isVerified) return alert('您已經是官方認證用戶！')
+    if (currentUser.appliedVerification) return alert('您已提交過申請，請等待站長審核！')
+
+    const updatedUser = { ...currentUser, appliedVerification: true }
+    setCurrentUser(updatedUser)
+    setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
+    alert('📩 藍勾認證申請已成功送出！請等待站長於後台審核。')
   }
 
   // 登入 / 註冊
@@ -183,12 +246,13 @@ export default function App() {
         return alert('❌ 密碼錯誤！請重新輸入。')
       }
       setCurrentUser(existingUser)
-      alert(existingUser.isAdmin ? '👑 歡迎站長登入管理員後台！' : `👋 歡迎回來，${existingUser.username}！`)
+      alert(existingUser.isAdmin ? '👑 歡迎站長登入！' : `👋 歡迎回來，${existingUser.username}！`)
     } else {
       const newUser: User = { 
         email: cleanEmail, 
         password: authPassword,
         username: authUsername.trim() || cleanEmail.split('@')[0], 
+        bio: '這個人很懶，什麼都沒留下...',
         exp: 50,
         isAdmin: false,
         isVerified: false
@@ -260,9 +324,9 @@ export default function App() {
     setFormData({ title: '', category: 'tech', desc: '', content: '' })
   }
 
-  // 文章刪除 (管理員或作者)
+  // 文章刪除
   const handleDeletePost = (id: number) => {
-    if (!confirm('⚠️ 確定要刪除這篇文章嗎？此操作無法恢復！')) return
+    if (!confirm('⚠️ 確定要刪除這篇文章嗎？')) return
     setPosts(posts.filter(p => p.id !== id))
     if (selectedPost?.id === id) setSelectedPost(null)
     alert('🗑️ 文章已成功刪除！')
@@ -299,7 +363,7 @@ export default function App() {
     addExp(10, '文章點讚互動')
   }
 
-  // 【管理員後台功能】切換使用者管理員權限
+  // 切換使用者管理員權限
   const toggleUserAdmin = (email: string) => {
     setRegisteredUsers(prev => prev.map(u => {
       if (u.email === email) return { ...u, isAdmin: !u.isAdmin }
@@ -307,18 +371,10 @@ export default function App() {
     }))
   }
 
-  // 【管理員後台功能】切換使用者官方認證
+  // 切換使用者官方認證 (給予/撤銷藍勾)
   const toggleUserVerified = (email: string) => {
     setRegisteredUsers(prev => prev.map(u => {
-      if (u.email === email) return { ...u, isVerified: !u.isVerified }
-      return u
-    }))
-  }
-
-  // 【管理員後台功能】調整經驗值
-  const updateUserExp = (email: string, newExp: number) => {
-    setRegisteredUsers(prev => prev.map(u => {
-      if (u.email === email) return { ...u, exp: newExp }
+      if (u.email === email) return { ...u, isVerified: !u.isVerified, appliedVerification: false }
       return u
     }))
   }
@@ -341,7 +397,7 @@ export default function App() {
     ? posts 
     : posts.filter(p => p.category === activeTab)
 
-  const currentUserLevel = currentUser ? getLevelInfo(currentUser.exp) : null
+  const isTodayCheckedIn = currentUser?.lastCheckInDate === new Date().toISOString().split('T')[0]
 
   return (
     <div style={styles.container}>
@@ -355,6 +411,25 @@ export default function App() {
           <div style={styles.userSection}>
             {currentUser ? (
               <div style={styles.userInfo}>
+                {/* 每日簽到按鈕 */}
+                <button 
+                  style={{ ...styles.checkInBtn, backgroundColor: isTodayCheckedIn ? '#1e293b' : '#10b981', color: isTodayCheckedIn ? '#64748b' : '#fff' }} 
+                  onClick={handleCheckIn}
+                >
+                  {isTodayCheckedIn ? '📅 已簽到' : '📅 每日簽到 (+20)'}
+                </button>
+
+                {/* 個人使用者中心 */}
+                <button 
+                  style={styles.userCenterBtn} 
+                  onClick={() => {
+                    setEditBioText(currentUser.bio || '')
+                    setShowUserCenter(true)
+                  }}
+                >
+                  👤 個人中心
+                </button>
+
                 {/* 管理員專用後台按鈕 */}
                 {currentUser.isAdmin && (
                   <button 
@@ -364,20 +439,17 @@ export default function App() {
                     ⚙️ 管理員後台
                   </button>
                 )}
+
                 <button style={styles.achieveBtn} onClick={() => setShowAchievementModal(true)}>
                   🏆 成就
                 </button>
-                <span 
-                  style={{ ...styles.levelBadge, backgroundColor: currentUserLevel?.color }}
-                  onClick={() => openAuthorProfile(currentUser.email)}
-                >
-                  {currentUserLevel?.name}
-                </span>
+
                 <span style={styles.userName} onClick={() => openAuthorProfile(currentUser.email)}>
                   {currentUser.username}
-                  {currentUser.isAdmin && <span style={styles.adminRoleBadge} title="管理員">👑 管理員</span>}
-                  {currentUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
+                  {currentUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                  {currentUser.isVerified && <FbVerifiedBadge size="16px" />}
                 </span>
+
                 <button 
                   style={styles.createBtn} 
                   onClick={() => {
@@ -420,14 +492,14 @@ export default function App() {
                 <div style={styles.statValue}>{posts.length} 篇</div>
               </div>
               <div style={styles.statCard}>
-                <div style={styles.statTitle}>官方認證用戶</div>
+                <div style={styles.statTitle}>藍勾官方認證</div>
                 <div style={styles.statValue}>{registeredUsers.filter(u => u.isVerified).length} 人</div>
               </div>
             </div>
 
-            {/* 後台會員管理 */}
+            {/* 後台會員與認證審核管理 */}
             <section style={styles.adminSection}>
-              <h2 style={styles.sectionTitle}>👥 會員權限與認證管理</h2>
+              <h2 style={styles.sectionTitle}>👥 會員權限與 FB 藍勾審核</h2>
               <table style={styles.adminTable}>
                 <thead>
                   <tr style={styles.tableHeader}>
@@ -435,8 +507,8 @@ export default function App() {
                     <th>Email 帳號</th>
                     <th>經驗值 (EXP)</th>
                     <th>管理員身分</th>
-                    <th>官方認證</th>
-                    <th>操作</th>
+                    <th>FB 藍勾認證</th>
+                    <th>操作與狀態</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,14 +516,7 @@ export default function App() {
                     <tr key={user.email} style={styles.tableRow}>
                       <td style={{ fontWeight: 'bold' }}>{user.username}</td>
                       <td style={{ color: '#94a3b8' }}>{user.email}</td>
-                      <td>
-                        <input 
-                          type="number" 
-                          style={styles.tableInput} 
-                          defaultValue={user.exp} 
-                          onBlur={(e) => updateUserExp(user.email, Number(e.target.value))}
-                        />
-                      </td>
+                      <td>{user.exp} EXP</td>
                       <td>
                         <button 
                           style={{ ...styles.toggleBtn, backgroundColor: user.isAdmin ? '#f59e0b' : '#334155' }}
@@ -462,14 +527,17 @@ export default function App() {
                       </td>
                       <td>
                         <button 
-                          style={{ ...styles.toggleBtn, backgroundColor: user.isVerified ? '#0284c7' : '#334155' }}
+                          style={{ ...styles.toggleBtn, backgroundColor: user.isVerified ? '#0866ff' : '#334155' }}
                           onClick={() => toggleUserVerified(user.email)}
                         >
-                          {user.isVerified ? '☑️ 已認證' : '未認證'}
+                          {user.isVerified ? '🟦 已獲得藍勾' : '未認證'}
                         </button>
                       </td>
                       <td>
-                        <button style={styles.smallBtn} onClick={() => openAuthorProfile(user.email)}>查看名片</button>
+                        {user.appliedVerification && !user.isVerified && (
+                          <span style={{ color: '#f59e0b', fontSize: '0.8rem', marginRight: '0.5rem' }}>📩 申請認證中</span>
+                        )}
+                        <button style={styles.smallBtn} onClick={() => openAuthorProfile(user.email)}>查看簡介</button>
                       </td>
                     </tr>
                   ))}
@@ -536,10 +604,7 @@ export default function App() {
                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold', color: '#f1f5f9' }}>{selectedPost.authorName}</span>
                   {selectedPost.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                  {selectedPost.authorIsVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
-                  <span style={{ ...styles.levelBadgeMini, backgroundColor: getLevelInfo(selectedPost.authorExp).color }}>
-                    {getLevelInfo(selectedPost.authorExp).name}
-                  </span>
+                  {selectedPost.authorIsVerified && <FbVerifiedBadge size="16px" />}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{selectedPost.authorEmail}</div>
               </div>
@@ -564,34 +629,6 @@ export default function App() {
         ) : (
           /* ================= 文章列表頁 ================= */
           <>
-            {currentUser && currentUserLevel && (
-              <section style={styles.userCard}>
-                <div style={styles.userCardHeader}>
-                  <div>
-                    <h2 style={{ margin: 0, fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      👋 歡迎回來，{currentUser.username}
-                      {currentUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                      {currentUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
-                    </h2>
-                    <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.9rem' }}>
-                      帳號 Email：{currentUser.email}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ ...styles.levelBadgeBig, backgroundColor: currentUserLevel.color }}>
-                      {currentUserLevel.name}
-                    </span>
-                    <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.3rem' }}>
-                      經驗值: {currentUser.exp} / {currentUserLevel.nextExp} EXP
-                    </div>
-                  </div>
-                </div>
-                <div style={styles.progressBg}>
-                  <div style={{ ...styles.progressBar, width: `${Math.min(100, (currentUser.exp / currentUserLevel.nextExp) * 100)}%`, backgroundColor: currentUserLevel.color }} />
-                </div>
-              </section>
-            )}
-
             <div style={styles.tabContainer}>
               <button style={activeTab === 'all' ? styles.tabActive : styles.tab} onClick={() => setActiveTab('all')}>
                 🔥 全部文章 ({posts.length})
@@ -606,7 +643,6 @@ export default function App() {
 
             <div style={styles.postList}>
               {filteredPosts.map(post => {
-                const authorLvl = getLevelInfo(post.authorExp)
                 const isLiked = currentUser && post.likedBy.includes(currentUser.email)
 
                 return (
@@ -620,13 +656,10 @@ export default function App() {
                     <p style={styles.postDesc}>{post.desc}</p>
 
                     <div style={styles.cardAuthorRow} onClick={(e) => openAuthorProfile(post.authorEmail, e)}>
-                      <span style={{ ...styles.authorLevelBadge, backgroundColor: authorLvl.color }}>
-                        {authorLvl.name}
-                      </span>
                       <span style={styles.authorName}>
                         ✍️ {post.authorName}
                         {post.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                        {post.authorIsVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
+                        {post.authorIsVerified && <FbVerifiedBadge size="15px" />}
                       </span>
                     </div>
 
@@ -652,6 +685,80 @@ export default function App() {
         )}
       </main>
 
+      {/* 個人使用者中心 Modal */}
+      {showUserCenter && currentUser && (
+        <div style={styles.modalOverlay} onClick={() => setShowUserCenter(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              👤 個人使用者中心
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', margin: '1.2rem 0' }}>
+              {/* 簽到與積分資訊 */}
+              <div style={styles.userCenterBox}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>目前累積積分</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#38bdf8' }}>{currentUser.exp} EXP</div>
+                  </div>
+                  <button 
+                    style={{ ...styles.checkInBtn, padding: '0.6rem 1rem', backgroundColor: isTodayCheckedIn ? '#334155' : '#10b981', color: isTodayCheckedIn ? '#94a3b8' : '#fff' }} 
+                    onClick={handleCheckIn}
+                  >
+                    {isTodayCheckedIn ? '✅ 今日已簽到' : '📅 每日簽到 (+20)'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 編輯個人簡介 */}
+              <div>
+                <label style={styles.label}>個人簡介 (Bio)</label>
+                <textarea 
+                  style={{ ...styles.input, height: '80px', marginBottom: '0.5rem' }} 
+                  value={editBioText} 
+                  onChange={e => setEditBioText(e.target.value)}
+                  placeholder="介紹一下你自己吧..."
+                />
+                <button style={{ ...styles.submitBtn, width: '100%' }} onClick={handleSaveBio}>保存簡介</button>
+              </div>
+
+              {/* 官方 FB 藍勾認證申請 */}
+              <div style={styles.userCenterBox}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      官方藍勾認證 <FbVerifiedBadge size="16px" />
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                      {currentUser.isVerified 
+                        ? '您已擁有官方藍勾認證身分' 
+                        : currentUser.appliedVerification 
+                        ? '申請已送出，正在等待管理員審核...' 
+                        : '獲得藍勾標籤，提升社群影響力'}
+                    </div>
+                  </div>
+                  {!currentUser.isVerified && (
+                    <button 
+                      style={{ 
+                        ...styles.smallBtn, 
+                        backgroundColor: currentUser.appliedVerification ? '#334155' : '#0866ff',
+                        cursor: currentUser.appliedVerification ? 'not-allowed' : 'pointer'
+                      }}
+                      onClick={handleApplyVerification}
+                      disabled={currentUser.appliedVerification}
+                    >
+                      {currentUser.appliedVerification ? '審核中' : '申請認證'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button style={{ ...styles.cancelBtn, width: '100%' }} onClick={() => setShowUserCenter(false)}>關閉使用者中心</button>
+          </div>
+        </div>
+      )}
+
       {/* 使用者名片 Modal */}
       {profileUser && (
         <div style={styles.modalOverlay} onClick={() => setProfileUser(null)}>
@@ -662,14 +769,16 @@ export default function App() {
               <h3 style={{ color: '#fff', margin: '0.5rem 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
                 {profileUser.username}
                 {profileUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                {profileUser.isVerified && <span style={styles.verifiedIcon} title="官方認證">☑️</span>}
+                {profileUser.isVerified && <FbVerifiedBadge size="18px" />}
               </h3>
               <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{profileUser.email}</p>
-              <span style={{ ...styles.levelBadgeBig, backgroundColor: getLevelInfo(profileUser.exp).color, display: 'inline-block', marginTop: '0.5rem' }}>
-                {getLevelInfo(profileUser.exp).name}
-              </span>
-              <div style={{ color: '#cbd5e1', marginTop: '0.8rem', fontSize: '0.9rem' }}>
-                累積經驗值：<strong>{profileUser.exp} EXP</strong>
+              
+              <div style={{ backgroundColor: '#0c1017', padding: '0.8rem', borderRadius: '8px', color: '#cbd5e1', marginTop: '0.8rem', fontSize: '0.875rem', textAlign: 'left', border: '1px solid #222d3d' }}>
+                <strong>簡介：</strong> {profileUser.bio || '這個人很懶，什麼都沒留下...'}
+              </div>
+
+              <div style={{ color: '#38bdf8', marginTop: '0.8rem', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                累積經驗值：{profileUser.exp} EXP
               </div>
             </div>
             <button style={{ ...styles.submitBtn, width: '100%' }} onClick={() => setProfileUser(null)}>關閉名片</button>
@@ -771,13 +880,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   logo: { fontSize: '1.2rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' },
   logoBadge: { backgroundColor: '#2563eb', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.85rem' },
   adminRoleBadge: { backgroundColor: '#d97706', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' },
-  verifiedIcon: { fontSize: '0.85rem' },
   userSection: { display: 'flex', alignItems: 'center' },
   userInfo: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' },
-  levelBadge: { color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
-  levelBadgeMini: { color: '#fff', fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '10px', fontWeight: 'bold' },
-  levelBadgeBig: { color: '#fff', fontSize: '0.85rem', padding: '0.3rem 0.8rem', borderRadius: '20px', fontWeight: 'bold' },
+  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' },
+  checkInBtn: { border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
+  userCenterBtn: { backgroundColor: '#334155', color: '#f1f5f9', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   adminDashboardBtn: { backgroundColor: '#f59e0b', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   achieveBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   loginBtn: { backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' },
@@ -799,14 +906,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   adminTable: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' },
   tableHeader: { borderBottom: '1px solid #334155', color: '#94a3b8' },
   tableRow: { borderBottom: '1px solid #1e293b' },
-  tableInput: { width: '70px', padding: '0.2rem 0.4rem', backgroundColor: '#0c1017', border: '1px solid #334155', color: '#fff', borderRadius: '4px' },
   toggleBtn: { border: 'none', color: '#fff', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
   smallBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
 
-  userCard: { backgroundColor: '#161b26', border: '1px solid #222d3d', borderRadius: '16px', padding: '1.5rem', marginBottom: '2rem' },
-  userCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
-  progressBg: { width: '100%', height: '8px', backgroundColor: '#1e293b', borderRadius: '4px', overflow: 'hidden' },
-  progressBar: { height: '100%', transition: 'width 0.3s ease' },
+  userCenterBox: { backgroundColor: '#0c1017', border: '1px solid #222d3d', borderRadius: '10px', padding: '1rem' },
   tabContainer: { display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' },
   tab: { backgroundColor: '#161b26', border: '1px solid #222d3d', color: '#94a3b8', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer' },
   tabActive: { backgroundColor: '#2563eb', border: '1px solid #2563eb', color: '#fff', padding: '0.6rem 1.2rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' },
@@ -814,8 +917,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   postCard: { backgroundColor: '#161b26', border: '1px solid #222d3d', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' },
   postCategory: { backgroundColor: '#1e293b', color: '#38bdf8', fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '4px' },
-  authorLevelBadge: { color: '#fff', fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 'bold' },
-  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' },
+  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.35rem' },
   cardAuthorRow: { display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', cursor: 'pointer' },
   postDate: { fontSize: '0.8rem', color: '#64748b' },
   postTitle: { fontSize: '1.15rem', fontWeight: '700', margin: '0 0 0.5rem 0', color: '#f1f5f9' },
