@@ -4,8 +4,13 @@ interface User {
   email: string
   password?: string
   username: string
-  avatar?: string          // 個人頭像 (可以是 Emoji 或 Base64/URL 圖片)
+  avatar?: string          // 個人頭像 (Emoji 或 Base64/URL 圖片)
   bio?: string             // 個人簡介
+  role?: string            // 職業 / 身份 (如：前端工程師)
+  location?: string        // 所在地 (可手動填寫或自動偵測帶入)
+  ip?: string              // 偵測到的 IP 地址
+  country?: string         // 偵測到的國家/地區
+  city?: string            // 偵測到的城市
   exp: number
   isAdmin?: boolean        // 是否為管理員
   isVerified?: boolean     // 是否為官方認證 (FB 藍勾)
@@ -26,6 +31,7 @@ interface Post {
   authorEmail: string
   authorName: string
   authorAvatar?: string
+  authorCountry?: string
   authorExp: number
   authorIsAdmin?: boolean
   authorIsVerified?: boolean
@@ -49,6 +55,11 @@ const ADMIN_USER: User = {
   username: 'Poen (站長)',
   avatar: '👑',
   bio: 'Poen 社群創辦人兼站長，歡迎大家交流討論！',
+  role: '全棧開發者 & 站長',
+  location: '台灣 (Taiwan)',
+  ip: '127.0.0.1',
+  country: '台灣 (Taiwan)',
+  city: '台北',
   exp: 1500,
   isAdmin: true,
   isVerified: true
@@ -69,6 +80,7 @@ const INITIAL_POSTS: Post[] = [
     authorEmail: 'admin@poenmail.eu.cc', 
     authorName: 'Poen (站長)',
     authorAvatar: '👑',
+    authorCountry: '台灣 (Taiwan)',
     authorExp: 1500,
     authorIsAdmin: true,
     authorIsVerified: true
@@ -86,6 +98,7 @@ const INITIAL_POSTS: Post[] = [
     authorEmail: 'dev@poenmail.eu.cc', 
     authorName: '前端極客',
     authorAvatar: '💻',
+    authorCountry: '香港 (Hong Kong)',
     authorExp: 250,
     authorIsAdmin: false,
     authorIsVerified: false
@@ -150,19 +163,19 @@ export default function App() {
   
   // 會員 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v10')
+    const saved = localStorage.getItem('poen_user_v11')
     return saved ? JSON.parse(saved) : ADMIN_USER
   })
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('poen_users_db_v10')
-    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', avatar: '💻', bio: '專注前端開發與使用者體驗設計', exp: 250, isAdmin: false, isVerified: false }]
+    const saved = localStorage.getItem('poen_users_db_v11')
+    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', avatar: '💻', bio: '專注前端開發與使用者體驗設計', role: 'UI/UX 設計師', location: '香港', exp: 250, isAdmin: false, isVerified: false }]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('poen_posts_v10')
+    const saved = localStorage.getItem('poen_posts_v11')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
@@ -177,8 +190,11 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authUsername, setAuthUsername] = useState('')
 
-  // 個人設定 State
+  // 個人資料編輯表單 State
+  const [editUsername, setEditUsername] = useState('')
   const [editBioText, setEditBioText] = useState('')
+  const [editRole, setEditRole] = useState('')
+  const [editLocation, setEditLocation] = useState('')
   const [editAvatar, setEditAvatar] = useState('')
 
   // 文章新增/編輯 Modal
@@ -188,20 +204,46 @@ export default function App() {
 
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('poen_posts_v10', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v11', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
-    localStorage.setItem('poen_users_db_v10', JSON.stringify(registeredUsers))
+    localStorage.setItem('poen_users_db_v11', JSON.stringify(registeredUsers))
   }, [registeredUsers])
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('poen_user_v10', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v11', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('poen_user_v10')
+      localStorage.removeItem('poen_user_v11')
     }
   }, [currentUser])
+
+  // 🌐 自動偵測 IP 與 國家/地區
+  useEffect(() => {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.ip) {
+          const detectedCountry = `${data.country_name} (${data.country_code})`
+          const detectedCity = data.city || ''
+          
+          if (currentUser) {
+            // 自動更新當前使用者的 IP 與 國家地點資訊
+            const updatedUser = {
+              ...currentUser,
+              ip: data.ip,
+              country: detectedCountry,
+              city: detectedCity,
+              location: currentUser.location || `${detectedCity}, ${detectedCountry}`
+            }
+            setCurrentUser(updatedUser)
+            setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
+          }
+        }
+      })
+      .catch(() => console.log('IP 偵測 API 暫時無法連線'))
+  }, [])
 
   // 成就系統計算
   const getAchievements = (user: User | null): Achievement[] => {
@@ -259,21 +301,29 @@ export default function App() {
     reader.readAsDataURL(file)
   }
 
-  // 保存個人設定 (簡介與頭像)
+  // 保存個人資料設定
   const handleSaveProfile = () => {
     if (!currentUser) return
-    const updatedUser = { 
+    const updatedUser: User = { 
       ...currentUser, 
+      username: editUsername.trim() || currentUser.username,
       bio: editBioText,
+      role: editRole,
+      location: editLocation,
       avatar: editAvatar || currentUser.avatar
     }
     setCurrentUser(updatedUser)
     setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
     
-    // 更新舊文章作者頭像
-    setPosts(prev => prev.map(p => p.authorEmail === currentUser.email ? { ...p, authorAvatar: updatedUser.avatar } : p))
+    // 更新舊文章作者資料
+    setPosts(prev => prev.map(p => p.authorEmail === currentUser.email ? { 
+      ...p, 
+      authorName: updatedUser.username,
+      authorAvatar: updatedUser.avatar,
+      authorCountry: updatedUser.country || updatedUser.location
+    } : p))
     
-    alert('✅ 個人設定已成功保存！')
+    alert('✅ 個人資料已成功保存！')
   }
 
   // 申請官方藍勾認證
@@ -310,6 +360,8 @@ export default function App() {
         username: authUsername.trim() || cleanEmail.split('@')[0], 
         avatar: '🐱',
         bio: '這個人很懶，什麼都沒留下...',
+        role: '社群成員',
+        location: '未知區域',
         exp: 50,
         isAdmin: false,
         isVerified: false
@@ -369,6 +421,7 @@ export default function App() {
         authorEmail: currentUser.email,
         authorName: currentUser.username,
         authorAvatar: currentUser.avatar,
+        authorCountry: currentUser.country || currentUser.location,
         authorExp: currentUser.exp,
         authorIsAdmin: currentUser.isAdmin,
         authorIsVerified: currentUser.isVerified,
@@ -490,15 +543,18 @@ export default function App() {
                   ✏️ 發文
                 </button>
 
-                {/* 個人中心點擊 (使用個人頭像取代文字) */}
+                {/* 個人中心點擊 */}
                 <div 
                   style={styles.avatarTrigger} 
                   onClick={() => {
+                    setEditUsername(currentUser.username || '')
                     setEditBioText(currentUser.bio || '')
+                    setEditRole(currentUser.role || '')
+                    setEditLocation(currentUser.location || '')
                     setEditAvatar(currentUser.avatar || '')
                     setShowUserCenter(true)
                   }}
-                  title="點擊打開個人設定"
+                  title="點擊打開個人中心與設定"
                 >
                   <UserAvatar avatar={currentUser.avatar} name={currentUser.username} size="38px" />
                   <span style={styles.userNameHeader}>{currentUser.username}</span>
@@ -544,16 +600,16 @@ export default function App() {
 
             {/* 後台會員與認證審核管理 */}
             <section style={styles.adminSection}>
-              <h2 style={styles.sectionTitle}>👥 會員權限與 FB 藍勾審核</h2>
+              <h2 style={styles.sectionTitle}>👥 會員權限與 IP 國家/地區記錄</h2>
               <table style={styles.adminTable}>
                 <thead>
                   <tr style={styles.tableHeader}>
                     <th>用戶</th>
                     <th>Email 帳號</th>
-                    <th>經驗值 (EXP)</th>
-                    <th>管理員身分</th>
-                    <th>FB 藍勾認證</th>
-                    <th>操作與狀態</th>
+                    <th>IP 與 國家/地區</th>
+                    <th>管理員</th>
+                    <th>FB 藍勾</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -564,7 +620,10 @@ export default function App() {
                         {user.username}
                       </td>
                       <td style={{ color: '#94a3b8' }}>{user.email}</td>
-                      <td>{user.exp} EXP</td>
+                      <td style={{ fontSize: '0.8rem', color: '#38bdf8' }}>
+                        🌐 {user.country || user.location || '未知'}<br/>
+                        <span style={{ color: '#64748b' }}>IP: {user.ip || '未紀錄'}</span>
+                      </td>
                       <td>
                         <button 
                           style={{ ...styles.toggleBtn, backgroundColor: user.isAdmin ? '#f59e0b' : '#334155' }}
@@ -654,7 +713,9 @@ export default function App() {
                   {selectedPost.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
                   {selectedPost.authorIsVerified && <FbVerifiedBadge size="16px" />}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{selectedPost.authorEmail}</div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  {selectedPost.authorEmail} • 🌐 {selectedPost.authorCountry || '未知區域'}
+                </div>
               </div>
             </div>
 
@@ -705,11 +766,16 @@ export default function App() {
 
                     <div style={styles.cardAuthorRow} onClick={(e) => openAuthorProfile(post.authorEmail, e)}>
                       <UserAvatar avatar={post.authorAvatar} name={post.authorName} size="28px" />
-                      <span style={styles.authorName}>
-                        {post.authorName}
-                        {post.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                        {post.authorIsVerified && <FbVerifiedBadge size="15px" />}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={styles.authorName}>
+                          {post.authorName}
+                          {post.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
+                          {post.authorIsVerified && <FbVerifiedBadge size="15px" />}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          🌐 {post.authorCountry || '未知國家/地區'}
+                        </span>
+                      </div>
                     </div>
 
                     <div style={styles.cardFooter}>
@@ -734,25 +800,36 @@ export default function App() {
         )}
       </main>
 
-      {/* 個人中心 Modal (包含頭像編輯、簽到、簡介、成就、認證) */}
+      {/* 個人中心 Modal (個人資料編輯、IP偵測、簽到、成就) */}
       {showUserCenter && currentUser && (
         <div style={styles.modalOverlay} onClick={() => setShowUserCenter(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>⚙️ 個人設定與中心</h2>
+          <div style={{ ...styles.modalContent, maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>⚙️ 個人資料與設定</h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', margin: '1rem 0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', margin: '1rem 0', maxHeight: '70vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
               
-              {/* 頭像選擇與上傳區塊 */}
+              {/* 🌐 IP 與 國家/地區自動偵測卡片 */}
+              <div style={{ ...styles.userCenterBox, borderLeft: '4px solid #38bdf8' }}>
+                <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.2rem' }}>網路與位置資訊 (自動偵測)</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#f1f5f9' }}>
+                  🌐 國家/地區：{currentUser.country || '偵測中...'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem' }}>
+                  當前 IP：{currentUser.ip || '獲取中...'} {currentUser.city ? `(${currentUser.city})` : ''}
+                </div>
+              </div>
+
+              {/* 頭像選擇與上傳 */}
               <div style={styles.userCenterBox}>
-                <label style={styles.label}>選擇或上傳大頭貼</label>
+                <label style={styles.label}>個人大頭貼</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.8rem' }}>
                   <UserAvatar avatar={editAvatar || currentUser.avatar} name={currentUser.username} size="60px" />
                   <label style={styles.uploadBtn}>
-                    📷 上傳圖片
+                    📷 上傳自訂圖片
                     <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
                   </label>
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '0.4rem' }}>快速選擇預設 Emoji 頭像：</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '0.4rem' }}>快速選用 Emoji 頭像：</div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {PRESET_AVATARS.map(emoji => (
                     <button 
@@ -767,6 +844,36 @@ export default function App() {
                       {emoji}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* 編輯個人詳細資料 */}
+              <div style={styles.userCenterBox}>
+                <label style={{ ...styles.label, color: '#38bdf8', fontWeight: 'bold', marginBottom: '0.8rem' }}>📝 填寫詳細個人資料</label>
+                
+                <div style={{ marginBottom: '0.8rem' }}>
+                  <label style={styles.label}>暱稱 (Username)</label>
+                  <input type="text" style={styles.input} value={editUsername} onChange={e => setEditUsername(e.target.value)} />
+                </div>
+
+                <div style={{ marginBottom: '0.8rem' }}>
+                  <label style={styles.label}>頭銜 / 職業 (Role)</label>
+                  <input type="text" style={styles.input} value={editRole} onChange={e => setEditRole(e.target.value)} placeholder="例如：前端工程師 / 學生" />
+                </div>
+
+                <div style={{ marginBottom: '0.8rem' }}>
+                  <label style={styles.label}>居住地 (Location)</label>
+                  <input type="text" style={styles.input} value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="例如：台北市, 台灣" />
+                </div>
+
+                <div>
+                  <label style={styles.label}>個人簡介 (Bio)</label>
+                  <textarea 
+                    style={{ ...styles.input, height: '65px' }} 
+                    value={editBioText} 
+                    onChange={e => setEditBioText(e.target.value)}
+                    placeholder="介紹一下你自己吧..."
+                  />
                 </div>
               </div>
 
@@ -786,21 +893,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 編輯個人簡介 */}
-              <div>
-                <label style={styles.label}>個人簡介 (Bio)</label>
-                <textarea 
-                  style={{ ...styles.input, height: '70px', marginBottom: '0.5rem' }} 
-                  value={editBioText} 
-                  onChange={e => setEditBioText(e.target.value)}
-                  placeholder="介紹一下你自己吧..."
-                />
-              </div>
-
-              {/* 成就面板展示 */}
+              {/* 成就面板 */}
               <div style={styles.userCenterBox}>
-                <label style={styles.label}>🏆 個人成就解鎖進度</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
+                <label style={styles.label}>🏆 成就解鎖進度</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '130px', overflowY: 'auto' }}>
                   {getAchievements(currentUser).map(ach => (
                     <div key={ach.id} style={{ ...styles.achieveCardSmall, opacity: ach.unlocked ? 1 : 0.4 }}>
                       <span style={{ fontSize: '1.2rem' }}>{ach.icon}</span>
@@ -814,7 +910,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 官方 FB 藍勾認證申請 */}
+              {/* 官方 FB 藍勾認證 */}
               <div style={styles.userCenterBox}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
@@ -823,10 +919,10 @@ export default function App() {
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                       {currentUser.isVerified 
-                        ? '您已獲得藍勾認證' 
+                        ? '您已獲得官方藍勾認證' 
                         : currentUser.appliedVerification 
-                        ? '申請審核中...' 
-                        : '提高社群識別度'}
+                        ? '審核中...' 
+                        : '提升社群公信力'}
                     </div>
                   </div>
                   {!currentUser.isVerified && (
@@ -846,9 +942,9 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button style={styles.cancelBtn} onClick={() => setShowUserCenter(false)}>取消</button>
-              <button style={styles.submitBtn} onClick={() => { handleSaveProfile(); setShowUserCenter(false); }}>保存設定</button>
+              <button style={styles.submitBtn} onClick={() => { handleSaveProfile(); setShowUserCenter(false); }}>保存所有資料</button>
             </div>
           </div>
         </div>
@@ -868,9 +964,13 @@ export default function App() {
                 {profileUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
                 {profileUser.isVerified && <FbVerifiedBadge size="18px" />}
               </h3>
-              <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{profileUser.email}</p>
+              <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0.2rem 0' }}>{profileUser.role || 'Poen 社群會員'}</p>
               
-              <div style={{ backgroundColor: '#0c1017', padding: '0.8rem', borderRadius: '8px', color: '#cbd5e1', marginTop: '0.8rem', fontSize: '0.875rem', textAlign: 'left', border: '1px solid #222d3d' }}>
+              <div style={{ display: 'inline-block', backgroundColor: '#1e293b', color: '#38bdf8', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', marginTop: '0.4rem' }}>
+                🌐 {profileUser.country || profileUser.location || '未知國家/地區'}
+              </div>
+
+              <div style={{ backgroundColor: '#0c1017', padding: '0.8rem', borderRadius: '8px', color: '#cbd5e1', marginTop: '1rem', fontSize: '0.875rem', textAlign: 'left', border: '1px solid #222d3d' }}>
                 <strong>簡介：</strong> {profileUser.bio || '這個人很懶，什麼都沒留下...'}
               </div>
 
