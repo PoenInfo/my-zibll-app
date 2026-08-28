@@ -1,5 +1,7 @@
 name = "my-zibll-app"
-pages_build_output_dir = "dist"
+
+[site]
+bucket = "./dist"
 
 [[d1_databases]]
 binding = "DB"
