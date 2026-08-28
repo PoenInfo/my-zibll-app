@@ -77,11 +77,11 @@ const INITIAL_POSTS: Post[] = [
 
 // 計算等級與頭銜邏輯
 const getLevelInfo = (exp: number, isAdmin?: boolean) => {
-  if (isAdmin) return { level: 5, name: '👑 站長管理員', color: '#f59e0b', nextExp: 2000 }
-  if (exp >= 600) return { level: 4, name: 'LV4 社群達人', color: '#ec4899', nextExp: 1000 }
-  if (exp >= 300) return { level: 3, name: 'LV3 資深客官', color: '#a855f7', nextExp: 600 }
-  if (exp >= 100) return { level: 2, name: 'LV2 漸入佳境', color: '#3b82f6', nextExp: 300 }
-  return { level: 1, name: 'LV1 新手小白', color: '#10b981', nextExp: 100 }
+  if (isAdmin) return { level: 5, name: 'LV5 站長', color: '#f59e0b', nextExp: 2000 }
+  if (exp >= 600) return { level: 4, name: 'LV4 達人', color: '#ec4899', nextExp: 1000 }
+  if (exp >= 300) return { level: 3, name: 'LV3 資深', color: '#a855f7', nextExp: 600 }
+  if (exp >= 100) return { level: 2, name: 'LV2 新星', color: '#3b82f6', nextExp: 300 }
+  return { level: 1, name: 'LV1 新手', color: '#10b981', nextExp: 100 }
 }
 
 export default function App() {
@@ -89,19 +89,19 @@ export default function App() {
   
   // 會員 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v6')
+    const saved = localStorage.getItem('poen_user_v7')
     return saved ? JSON.parse(saved) : ADMIN_USER
   })
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('poen_users_db_v6')
+    const saved = localStorage.getItem('poen_users_db_v7')
     return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', exp: 250, isAdmin: false }]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('poen_posts_v6')
+    const saved = localStorage.getItem('poen_posts_v7')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
@@ -125,18 +125,18 @@ export default function App() {
 
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('poen_posts_v6', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v7', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
-    localStorage.setItem('poen_users_db_v6', JSON.stringify(registeredUsers))
+    localStorage.setItem('poen_users_db_v7', JSON.stringify(registeredUsers))
   }, [registeredUsers])
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('poen_user_v6', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v7', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('poen_user_v6')
+      localStorage.removeItem('poen_user_v7')
     }
   }, [currentUser])
 
@@ -375,7 +375,7 @@ export default function App() {
                   {currentUserLevel?.name}
                 </span>
                 <span style={styles.userName} onClick={() => openAuthorProfile(currentUser.email)}>
-                  {currentUser.username} {currentUser.isAdmin && <span style={styles.officialBadge}>☑️ 官方</span>}
+                  {currentUser.username} {currentUser.isAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
                 </span>
                 <button 
                   style={styles.createBtn} 
@@ -422,10 +422,10 @@ export default function App() {
             <div style={styles.authorBar} onClick={(e) => openAuthorProfile(selectedPost.authorEmail, e)}>
               <div style={styles.authorAvatar}>{selectedPost.authorName.charAt(0)}</div>
               <div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold', color: '#f1f5f9' }}>{selectedPost.authorName}</span>
-                  {selectedPost.authorIsAdmin && <span style={styles.officialBadge}>☑️ 官方</span>}
-                  <span style={{ ...styles.levelBadge, backgroundColor: getLevelInfo(selectedPost.authorExp, selectedPost.authorIsAdmin).color }}>
+                  {selectedPost.authorIsAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
+                  <span style={{ ...styles.levelBadgeMini, backgroundColor: getLevelInfo(selectedPost.authorExp, selectedPost.authorIsAdmin).color }}>
                     {getLevelInfo(selectedPost.authorExp, selectedPost.authorIsAdmin).name}
                   </span>
                 </div>
@@ -457,7 +457,7 @@ export default function App() {
                 <div style={styles.userCardHeader}>
                   <div>
                     <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
-                      👋 歡迎回來，{currentUser.username} {currentUser.isAdmin && <span style={styles.officialBadge}>☑️ 官方認證管理員</span>}
+                      👋 歡迎回來，{currentUser.username} {currentUser.isAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
                     </h2>
                     <p style={{ margin: '0.25rem 0 0 0', color: '#94a3b8', fontSize: '0.9rem' }}>
                       帳號 Email：{currentUser.email}
@@ -518,7 +518,7 @@ export default function App() {
                         {authorLvl.name}
                       </span>
                       <span style={styles.authorName}>
-                        ✍️ {post.authorName} {post.authorIsAdmin && <span style={styles.officialBadge}>☑️ 官方</span>}
+                        ✍️ {post.authorName} {post.authorIsAdmin && <span style={styles.miniBadge} title="官方認證">☑️</span>}
                       </span>
                     </div>
 
@@ -567,11 +567,11 @@ export default function App() {
         </div>
       )}
 
-      {/* 使用者名片 Modal (含管理員控管設定) */}
+      {/* 使用者名片 Modal */}
       {profileUser && (
         <div style={styles.modalOverlay} onClick={() => setProfileUser(null)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>👤 會員名片 {currentUser?.isAdmin && '(管理員模式)'}</h2>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>👤 會員名片</h2>
             <div style={{ textAlign: 'center', margin: '1.2rem 0' }}>
               <div style={styles.profileAvatarBig}>{profileUser.username.charAt(0)}</div>
               <h3 style={{ color: '#fff', margin: '0.5rem 0' }}>
@@ -686,10 +686,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   logo: { fontSize: '1.2rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' },
   logoBadge: { backgroundColor: '#2563eb', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.85rem' },
   officialBadge: { backgroundColor: '#0284c7', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' },
+  miniBadge: { fontSize: '0.8rem', cursor: 'pointer' },
   userSection: { display: 'flex', alignItems: 'center' },
   userInfo: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' },
+  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' },
   levelBadge: { color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
+  levelBadgeMini: { color: '#fff', fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '10px', fontWeight: 'bold' },
   levelBadgeBig: { color: '#fff', fontSize: '0.85rem', padding: '0.3rem 0.8rem', borderRadius: '20px', fontWeight: 'bold' },
   achieveBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   loginBtn: { backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' },
@@ -710,7 +712,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' },
   postCategory: { backgroundColor: '#1e293b', color: '#38bdf8', fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '4px' },
   authorLevelBadge: { color: '#fff', fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 'bold' },
-  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.3rem' },
+  authorName: { fontSize: '0.85rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' },
   cardAuthorRow: { display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', cursor: 'pointer' },
   postDate: { fontSize: '0.8rem', color: '#64748b' },
   postTitle: { fontSize: '1.15rem', fontWeight: '700', margin: '0 0 0.5rem 0', color: '#f1f5f9' },
