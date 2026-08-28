@@ -161,11 +161,10 @@ const UserAvatar = ({ avatar, name, size = '36px' }: { avatar?: string; name: st
 export default function App() {
   const [activeTab, setActiveTab] = useState('all')
   
-  // 會員 State
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v11')
-    return saved ? JSON.parse(saved) : ADMIN_USER
-  })
+const [currentUser, setCurrentUser] = useState(() => {
+  const saved = localStorage.getItem('currentUser');
+  return saved ? JSON.parse(saved) : null;
+});
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
