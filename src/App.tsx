@@ -4,6 +4,7 @@ interface User {
   email: string
   password?: string
   username: string
+  avatar?: string          // 個人頭像 (可以是 Emoji 或 Base64/URL 圖片)
   bio?: string             // 個人簡介
   exp: number
   isAdmin?: boolean        // 是否為管理員
@@ -24,6 +25,7 @@ interface Post {
   content: string
   authorEmail: string
   authorName: string
+  authorAvatar?: string
   authorExp: number
   authorIsAdmin?: boolean
   authorIsVerified?: boolean
@@ -37,11 +39,15 @@ interface Achievement {
   unlocked: boolean
 }
 
+// 預設可選頭像清單
+const PRESET_AVATARS = ['🐱', '🚀', '💻', '🌊', '⚡', '🦄', '🤖', '👑']
+
 // 預設管理員帳號
 const ADMIN_USER: User = {
   email: 'admin@poenmail.eu.cc',
   password: 'admin123',
   username: 'Poen (站長)',
+  avatar: '👑',
   bio: 'Poen 社群創辦人兼站長，歡迎大家交流討論！',
   exp: 1500,
   isAdmin: true,
@@ -62,6 +68,7 @@ const INITIAL_POSTS: Post[] = [
     content: '這是 Poen 主題的詳細教學內容。利用 React + Cloudflare Pages 可以實現毫秒級別的載入速度！',
     authorEmail: 'admin@poenmail.eu.cc', 
     authorName: 'Poen (站長)',
+    authorAvatar: '👑',
     authorExp: 1500,
     authorIsAdmin: true,
     authorIsVerified: true
@@ -78,6 +85,7 @@ const INITIAL_POSTS: Post[] = [
     content: '前端生態系在 2026 年已經高度自動化。極簡、效能與模組化組件成為主流...',
     authorEmail: 'dev@poenmail.eu.cc', 
     authorName: '前端極客',
+    authorAvatar: '💻',
     authorExp: 250,
     authorIsAdmin: false,
     authorIsVerified: false
@@ -108,24 +116,53 @@ const FbVerifiedBadge = ({ size = '16px' }: { size?: string }) => (
   </span>
 )
 
+// 通用頭像組件 (支援圖片 URL 或 Emoji/文字)
+const UserAvatar = ({ avatar, name, size = '36px' }: { avatar?: string; name: string; size?: string }) => {
+  const isImage = avatar && (avatar.startsWith('data:image') || avatar.startsWith('http'))
+  return (
+    <div 
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        backgroundColor: '#2563eb',
+        color: '#fff',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        fontWeight: 'bold',
+        fontSize: `calc(${size} * 0.5)`,
+        overflow: 'hidden',
+        flexShrink: 0
+      }}
+    >
+      {isImage ? (
+        <img src={avatar} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        avatar || name.charAt(0)
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('all')
   
   // 會員 State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('poen_user_v9')
+    const saved = localStorage.getItem('poen_user_v10')
     return saved ? JSON.parse(saved) : ADMIN_USER
   })
 
   // 用戶資料庫
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('poen_users_db_v9')
-    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', bio: '專注前端開發與使用者體驗設計', exp: 250, isAdmin: false, isVerified: false }]
+    const saved = localStorage.getItem('poen_users_db_v10')
+    return saved ? JSON.parse(saved) : [ADMIN_USER, { email: 'dev@poenmail.eu.cc', password: '123', username: '前端極客', avatar: '💻', bio: '專注前端開發與使用者體驗設計', exp: 250, isAdmin: false, isVerified: false }]
   })
 
   // 文章列表 State
   const [posts, setPosts] = useState<Post[]>(() => {
-    const saved = localStorage.getItem('poen_posts_v9')
+    const saved = localStorage.getItem('poen_posts_v10')
     return saved ? JSON.parse(saved) : INITIAL_POSTS
   })
 
@@ -140,31 +177,29 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authUsername, setAuthUsername] = useState('')
 
-  // 個人簡介編輯 State
+  // 個人設定 State
   const [editBioText, setEditBioText] = useState('')
+  const [editAvatar, setEditAvatar] = useState('')
 
   // 文章新增/編輯 Modal
   const [showPostModal, setShowPostModal] = useState(false)
   const [editingPostId, setEditingPostId] = useState<number | null>(null)
   const [formData, setFormData] = useState({ title: '', category: 'tech', desc: '', content: '' })
 
-  // 成就系統 Modal
-  const [showAchievementModal, setShowAchievementModal] = useState(false)
-
   // 同步 Save 到 LocalStorage
   useEffect(() => {
-    localStorage.setItem('poen_posts_v9', JSON.stringify(posts))
+    localStorage.setItem('poen_posts_v10', JSON.stringify(posts))
   }, [posts])
 
   useEffect(() => {
-    localStorage.setItem('poen_users_db_v9', JSON.stringify(registeredUsers))
+    localStorage.setItem('poen_users_db_v10', JSON.stringify(registeredUsers))
   }, [registeredUsers])
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('poen_user_v9', JSON.stringify(currentUser))
+      localStorage.setItem('poen_user_v10', JSON.stringify(currentUser))
     } else {
-      localStorage.removeItem('poen_user_v9')
+      localStorage.removeItem('poen_user_v10')
     }
   }, [currentUser])
 
@@ -211,13 +246,34 @@ export default function App() {
     alert('✅ 簽到成功！獲得 +20 EXP！')
   }
 
-  // 保存個人簡介
-  const handleSaveBio = () => {
+  // 上傳頭像處理 (Base64)
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) return alert('⚠️ 圖片大小不能超過 2MB！')
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setEditAvatar(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 保存個人設定 (簡介與頭像)
+  const handleSaveProfile = () => {
     if (!currentUser) return
-    const updatedUser = { ...currentUser, bio: editBioText }
+    const updatedUser = { 
+      ...currentUser, 
+      bio: editBioText,
+      avatar: editAvatar || currentUser.avatar
+    }
     setCurrentUser(updatedUser)
     setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
-    alert('✅ 個人簡介已成功更新！')
+    
+    // 更新舊文章作者頭像
+    setPosts(prev => prev.map(p => p.authorEmail === currentUser.email ? { ...p, authorAvatar: updatedUser.avatar } : p))
+    
+    alert('✅ 個人設定已成功保存！')
   }
 
   // 申請官方藍勾認證
@@ -252,6 +308,7 @@ export default function App() {
         email: cleanEmail, 
         password: authPassword,
         username: authUsername.trim() || cleanEmail.split('@')[0], 
+        avatar: '🐱',
         bio: '這個人很懶，什麼都沒留下...',
         exp: 50,
         isAdmin: false,
@@ -311,6 +368,7 @@ export default function App() {
         content: formData.content || formData.desc,
         authorEmail: currentUser.email,
         authorName: currentUser.username,
+        authorAvatar: currentUser.avatar,
         authorExp: currentUser.exp,
         authorIsAdmin: currentUser.isAdmin,
         authorIsVerified: currentUser.isVerified,
@@ -411,25 +469,6 @@ export default function App() {
           <div style={styles.userSection}>
             {currentUser ? (
               <div style={styles.userInfo}>
-                {/* 每日簽到按鈕 */}
-                <button 
-                  style={{ ...styles.checkInBtn, backgroundColor: isTodayCheckedIn ? '#1e293b' : '#10b981', color: isTodayCheckedIn ? '#64748b' : '#fff' }} 
-                  onClick={handleCheckIn}
-                >
-                  {isTodayCheckedIn ? '📅 已簽到' : '📅 每日簽到 (+20)'}
-                </button>
-
-                {/* 個人使用者中心 */}
-                <button 
-                  style={styles.userCenterBtn} 
-                  onClick={() => {
-                    setEditBioText(currentUser.bio || '')
-                    setShowUserCenter(true)
-                  }}
-                >
-                  👤 個人中心
-                </button>
-
                 {/* 管理員專用後台按鈕 */}
                 {currentUser.isAdmin && (
                   <button 
@@ -439,16 +478,6 @@ export default function App() {
                     ⚙️ 管理員後台
                   </button>
                 )}
-
-                <button style={styles.achieveBtn} onClick={() => setShowAchievementModal(true)}>
-                  🏆 成就
-                </button>
-
-                <span style={styles.userName} onClick={() => openAuthorProfile(currentUser.email)}>
-                  {currentUser.username}
-                  {currentUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
-                  {currentUser.isVerified && <FbVerifiedBadge size="16px" />}
-                </span>
 
                 <button 
                   style={styles.createBtn} 
@@ -460,6 +489,22 @@ export default function App() {
                 >
                   ✏️ 發文
                 </button>
+
+                {/* 個人中心點擊 (使用個人頭像取代文字) */}
+                <div 
+                  style={styles.avatarTrigger} 
+                  onClick={() => {
+                    setEditBioText(currentUser.bio || '')
+                    setEditAvatar(currentUser.avatar || '')
+                    setShowUserCenter(true)
+                  }}
+                  title="點擊打開個人設定"
+                >
+                  <UserAvatar avatar={currentUser.avatar} name={currentUser.username} size="38px" />
+                  <span style={styles.userNameHeader}>{currentUser.username}</span>
+                  {currentUser.isVerified && <FbVerifiedBadge size="16px" />}
+                </div>
+
                 <button style={styles.logoutBtn} onClick={() => { setCurrentUser(null); setShowAdminDashboard(false); alert('已成功登出！'); }}>登出</button>
               </div>
             ) : (
@@ -503,7 +548,7 @@ export default function App() {
               <table style={styles.adminTable}>
                 <thead>
                   <tr style={styles.tableHeader}>
-                    <th>用戶暱稱</th>
+                    <th>用戶</th>
                     <th>Email 帳號</th>
                     <th>經驗值 (EXP)</th>
                     <th>管理員身分</th>
@@ -514,7 +559,10 @@ export default function App() {
                 <tbody>
                   {registeredUsers.map(user => (
                     <tr key={user.email} style={styles.tableRow}>
-                      <td style={{ fontWeight: 'bold' }}>{user.username}</td>
+                      <td style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                        <UserAvatar avatar={user.avatar} name={user.username} size="28px" />
+                        {user.username}
+                      </td>
                       <td style={{ color: '#94a3b8' }}>{user.email}</td>
                       <td>{user.exp} EXP</td>
                       <td>
@@ -537,7 +585,7 @@ export default function App() {
                         {user.appliedVerification && !user.isVerified && (
                           <span style={{ color: '#f59e0b', fontSize: '0.8rem', marginRight: '0.5rem' }}>📩 申請認證中</span>
                         )}
-                        <button style={styles.smallBtn} onClick={() => openAuthorProfile(user.email)}>查看簡介</button>
+                        <button style={styles.smallBtn} onClick={() => openAuthorProfile(user.email)}>查看名片</button>
                       </td>
                     </tr>
                   ))}
@@ -599,7 +647,7 @@ export default function App() {
             <h1 style={styles.detailTitle}>{selectedPost.title}</h1>
 
             <div style={styles.authorBar} onClick={(e) => openAuthorProfile(selectedPost.authorEmail, e)}>
-              <div style={styles.authorAvatar}>{selectedPost.authorName.charAt(0)}</div>
+              <UserAvatar avatar={selectedPost.authorAvatar} name={selectedPost.authorName} size="42px" />
               <div>
                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold', color: '#f1f5f9' }}>{selectedPost.authorName}</span>
@@ -656,8 +704,9 @@ export default function App() {
                     <p style={styles.postDesc}>{post.desc}</p>
 
                     <div style={styles.cardAuthorRow} onClick={(e) => openAuthorProfile(post.authorEmail, e)}>
+                      <UserAvatar avatar={post.authorAvatar} name={post.authorName} size="28px" />
                       <span style={styles.authorName}>
-                        ✍️ {post.authorName}
+                        {post.authorName}
                         {post.authorIsAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
                         {post.authorIsVerified && <FbVerifiedBadge size="15px" />}
                       </span>
@@ -685,21 +734,48 @@ export default function App() {
         )}
       </main>
 
-      {/* 個人使用者中心 Modal */}
+      {/* 個人中心 Modal (包含頭像編輯、簽到、簡介、成就、認證) */}
       {showUserCenter && currentUser && (
         <div style={styles.modalOverlay} onClick={() => setShowUserCenter(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              👤 個人使用者中心
-            </h2>
+            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>⚙️ 個人設定與中心</h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', margin: '1.2rem 0' }}>
-              {/* 簽到與積分資訊 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', margin: '1rem 0' }}>
+              
+              {/* 頭像選擇與上傳區塊 */}
+              <div style={styles.userCenterBox}>
+                <label style={styles.label}>選擇或上傳大頭貼</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.8rem' }}>
+                  <UserAvatar avatar={editAvatar || currentUser.avatar} name={currentUser.username} size="60px" />
+                  <label style={styles.uploadBtn}>
+                    📷 上傳圖片
+                    <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+                  </label>
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '0.4rem' }}>快速選擇預設 Emoji 頭像：</div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {PRESET_AVATARS.map(emoji => (
+                    <button 
+                      key={emoji} 
+                      style={{ 
+                        ...styles.avatarOptionBtn, 
+                        borderColor: editAvatar === emoji ? '#38bdf8' : '#334155',
+                        backgroundColor: editAvatar === emoji ? '#1e293b' : '#0c1017'
+                      }}
+                      onClick={() => setEditAvatar(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 每日簽到與積分資訊 */}
               <div style={styles.userCenterBox}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>目前累積積分</div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#38bdf8' }}>{currentUser.exp} EXP</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#38bdf8' }}>{currentUser.exp} EXP</div>
                   </div>
                   <button 
                     style={{ ...styles.checkInBtn, padding: '0.6rem 1rem', backgroundColor: isTodayCheckedIn ? '#334155' : '#10b981', color: isTodayCheckedIn ? '#94a3b8' : '#fff' }} 
@@ -714,12 +790,28 @@ export default function App() {
               <div>
                 <label style={styles.label}>個人簡介 (Bio)</label>
                 <textarea 
-                  style={{ ...styles.input, height: '80px', marginBottom: '0.5rem' }} 
+                  style={{ ...styles.input, height: '70px', marginBottom: '0.5rem' }} 
                   value={editBioText} 
                   onChange={e => setEditBioText(e.target.value)}
                   placeholder="介紹一下你自己吧..."
                 />
-                <button style={{ ...styles.submitBtn, width: '100%' }} onClick={handleSaveBio}>保存簡介</button>
+              </div>
+
+              {/* 成就面板展示 */}
+              <div style={styles.userCenterBox}>
+                <label style={styles.label}>🏆 個人成就解鎖進度</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
+                  {getAchievements(currentUser).map(ach => (
+                    <div key={ach.id} style={{ ...styles.achieveCardSmall, opacity: ach.unlocked ? 1 : 0.4 }}>
+                      <span style={{ fontSize: '1.2rem' }}>{ach.icon}</span>
+                      <div style={{ flex: 1, fontSize: '0.85rem' }}>
+                        <strong style={{ color: ach.unlocked ? '#38bdf8' : '#94a3b8' }}>{ach.title}</strong>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{ach.desc}</div>
+                      </div>
+                      {ach.unlocked && <span>✅</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* 官方 FB 藍勾認證申請 */}
@@ -731,10 +823,10 @@ export default function App() {
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                       {currentUser.isVerified 
-                        ? '您已擁有官方藍勾認證身分' 
+                        ? '您已獲得藍勾認證' 
                         : currentUser.appliedVerification 
-                        ? '申請已送出，正在等待管理員審核...' 
-                        : '獲得藍勾標籤，提升社群影響力'}
+                        ? '申請審核中...' 
+                        : '提高社群識別度'}
                     </div>
                   </div>
                   {!currentUser.isVerified && (
@@ -754,7 +846,10 @@ export default function App() {
               </div>
             </div>
 
-            <button style={{ ...styles.cancelBtn, width: '100%' }} onClick={() => setShowUserCenter(false)}>關閉使用者中心</button>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button style={styles.cancelBtn} onClick={() => setShowUserCenter(false)}>取消</button>
+              <button style={styles.submitBtn} onClick={() => { handleSaveProfile(); setShowUserCenter(false); }}>保存設定</button>
+            </div>
           </div>
         </div>
       )}
@@ -765,7 +860,9 @@ export default function App() {
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
             <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>👤 會員名片</h2>
             <div style={{ textAlign: 'center', margin: '1.2rem 0' }}>
-              <div style={styles.profileAvatarBig}>{profileUser.username.charAt(0)}</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                <UserAvatar avatar={profileUser.avatar} name={profileUser.username} size="70px" />
+              </div>
               <h3 style={{ color: '#fff', margin: '0.5rem 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
                 {profileUser.username}
                 {profileUser.isAdmin && <span style={styles.adminRoleBadge}>👑 管理員</span>}
@@ -782,29 +879,6 @@ export default function App() {
               </div>
             </div>
             <button style={{ ...styles.submitBtn, width: '100%' }} onClick={() => setProfileUser(null)}>關閉名片</button>
-          </div>
-        </div>
-      )}
-
-      {/* 成就 Modal */}
-      {showAchievementModal && currentUser && (
-        <div style={styles.modalOverlay} onClick={() => setShowAchievementModal(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: '#f1f5f9' }}>🏆 個人成就面板</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
-              {getAchievements(currentUser).map(ach => (
-                <div key={ach.id} style={{ ...styles.achieveCard, opacity: ach.unlocked ? 1 : 0.4 }}>
-                  <div style={{ fontSize: '1.8rem' }}>{ach.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 'bold', color: ach.unlocked ? '#38bdf8' : '#64748b' }}>
-                      {ach.title} {ach.unlocked && '✅'}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{ach.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button style={{ ...styles.submitBtn, width: '100%' }} onClick={() => setShowAchievementModal(false)}>關閉成就</button>
           </div>
         </div>
       )}
@@ -876,17 +950,16 @@ export default function App() {
 const styles: { [key: string]: React.CSSProperties } = {
   container: { minHeight: '100vh', backgroundColor: '#0c1017', color: '#e2e8f0', fontFamily: 'sans-serif' },
   navbar: { backgroundColor: '#161b26', borderBottom: '1px solid #222d3d', position: 'sticky', top: 0, zIndex: 100 },
-  navContent: { maxWidth: '1100px', margin: '0 auto', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  navContent: { maxWidth: '1100px', margin: '0 auto', padding: '0.8rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   logo: { fontSize: '1.2rem', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' },
   logoBadge: { backgroundColor: '#2563eb', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.85rem' },
   adminRoleBadge: { backgroundColor: '#d97706', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' },
   userSection: { display: 'flex', alignItems: 'center' },
-  userInfo: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  userName: { fontWeight: '600', color: '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' },
+  userInfo: { display: 'flex', alignItems: 'center', gap: '0.8rem' },
+  avatarTrigger: { display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', backgroundColor: '#0c1017', padding: '0.3rem 0.6rem', borderRadius: '20px', border: '1px solid #222d3d' },
+  userNameHeader: { fontWeight: '600', color: '#f1f5f9', fontSize: '0.9rem' },
   checkInBtn: { border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
-  userCenterBtn: { backgroundColor: '#334155', color: '#f1f5f9', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   adminDashboardBtn: { backgroundColor: '#f59e0b', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
-  achieveBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' },
   loginBtn: { backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' },
   logoutBtn: { backgroundColor: '#334155', color: '#94a3b8', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' },
   createBtn: { backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' },
@@ -894,7 +967,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   dangerBtn: { backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' },
   main: { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' },
   
-  // 管理員後台樣式
   dashboardContainer: { display: 'flex', flexDirection: 'column', gap: '2rem' },
   dashboardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' },
@@ -910,6 +982,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   smallBtn: { backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' },
 
   userCenterBox: { backgroundColor: '#0c1017', border: '1px solid #222d3d', borderRadius: '10px', padding: '1rem' },
+  uploadBtn: { backgroundColor: '#1e293b', color: '#38bdf8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', border: '1px solid #334155' },
+  avatarOptionBtn: { width: '36px', height: '36px', borderRadius: '50%', border: '1px solid #334155', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', justifyContent: 'center', alignItems: 'center' },
+  achieveCardSmall: { backgroundColor: '#161b26', border: '1px solid #222d3d', padding: '0.4rem 0.6rem', borderRadius: '6px', display: 'flex', gap: '0.6rem', alignItems: 'center' },
+
   tabContainer: { display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' },
   tab: { backgroundColor: '#161b26', border: '1px solid #222d3d', color: '#94a3b8', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer' },
   tabActive: { backgroundColor: '#2563eb', border: '1px solid #2563eb', color: '#fff', padding: '0.6rem 1.2rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' },
@@ -928,13 +1004,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   backBtn: { backgroundColor: '#1e293b', color: '#38bdf8', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer' },
   detailTitle: { fontSize: '2rem', margin: '1rem 0', color: '#fff' },
   authorBar: { display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: '#0c1017', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', cursor: 'pointer' },
-  authorAvatar: { width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#2563eb', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem' },
   detailContent: { fontSize: '1.05rem', lineHeight: '1.8', color: '#cbd5e1', marginBottom: '2rem', whiteSpace: 'pre-line' },
   detailFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #222d3d', paddingTop: '1.5rem', color: '#64748b' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: '#161b26', border: '1px solid #334155', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '450px' },
-  achieveCard: { backgroundColor: '#0c1017', border: '1px solid #222d3d', padding: '0.75rem 1rem', borderRadius: '10px', display: 'flex', gap: '1rem', alignItems: 'center' },
-  profileAvatarBig: { width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#2563eb', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.8rem', margin: '0 auto' },
+  modalContent: { backgroundColor: '#161b26', border: '1px solid #334155', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '480px' },
   label: { display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' },
   input: { width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#0c1017', color: '#fff', boxSizing: 'border-box' },
   cancelBtn: { backgroundColor: '#1e293b', color: '#94a3b8', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer' },
