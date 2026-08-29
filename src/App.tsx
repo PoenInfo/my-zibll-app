@@ -13,7 +13,7 @@ interface User {
   city?: string            // 偵測到的城市
   exp: number
   isAdmin?: boolean        // 是否為管理員
-  isVerified?: boolean     // 是否為官方認證 (FB 藍勾)
+  isVerified?: boolean     // 是否為官方認證
   lastCheckInDate?: string // 上次簽到日期
   appliedVerification?: boolean // 是否已申請認證
 }
@@ -59,7 +59,7 @@ const ADMIN_USER: User = {
   location: '台灣 (Taiwan)',
   ip: '127.0.0.1',
   country: '台灣 (Taiwan)',
-  city: '台北',
+  city: '台南',
   exp: 1500,
   isAdmin: true,
   isVerified: true
@@ -255,7 +255,7 @@ const [currentUser, setCurrentUser] = useState(() => {
       { id: '2', title: '持之以恆', desc: '完成至少 1 次每日簽到', icon: '📅', unlocked: !!user.lastCheckInDate },
       { id: '3', title: '筆耕不輟', desc: '成功發布至少 1 篇文章', icon: '✍️', unlocked: userPostsCount >= 1 },
       { id: '4', title: '熱心交流', desc: '給予文章 3 次以上的點讚', icon: '🎉', unlocked: userLikesGivenCount >= 3 },
-      { id: '5', title: '藍勾認證', desc: '獲得官方 Facebook 風格藍勾認證', icon: '🟦', unlocked: !!user.isVerified }
+      { id: '5', title: '藍勾認證', desc: '獲得官方認證', icon: '🪪', unlocked: !!user.isVerified }
     ]
   }
 
@@ -334,7 +334,7 @@ const [currentUser, setCurrentUser] = useState(() => {
     const updatedUser = { ...currentUser, appliedVerification: true }
     setCurrentUser(updatedUser)
     setRegisteredUsers(prev => prev.map(u => u.email === currentUser.email ? updatedUser : u))
-    alert('📩 藍勾認證申請已成功送出！請等待站長於後台審核。')
+    alert('📩 官方認證申請已成功送出！請等待站長於後台審核。')
   }
 
   // 登入 / 註冊
@@ -451,16 +451,34 @@ const [currentUser, setCurrentUser] = useState(() => {
       return alert('⚠️ 您已經給這篇文章點過讚了！')
     }
 
-    const updatedPosts = posts.map(p => {
-      if (p.id === post.id) {
-        return {
-          ...p,
-          likes: p.likes + 1,
-          likedBy: [...p.likedBy, currentUser.email]
-        }
-      }
-      return p
-    })
+   const handleLikePost = async (post) => {
+  if (!currentUser) return alert('請先登入！');
+
+  // 1. 先計算出更新後的文章資料
+  const updatedPost = {
+    ...post,
+    likes: post.likes + 1,
+    likedBy: [...(post.likedBy || []), currentUser.email]
+  };
+
+  try {
+    // 2. 💡 關鍵：發送 API 請求把資料寫入 Cloudflare D1 資料庫
+    const res = await fetch(`/api/posts/${post.id}`, {
+      method: 'PUT', // 或 POST
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedPost)
+    });
+
+    if (res.ok) {
+      // 3. 資料庫更新成功後，才更新前端的 React State 畫面
+      setPosts(posts.map(p => p.id === post.id ? updatedPost : p));
+    } else {
+      console.error('寫入資料庫失敗');
+    }
+  } catch (error) {
+    console.error('網路錯誤:', error);
+  }
+};
 
     setPosts(updatedPosts)
     if (selectedPost && selectedPost.id === post.id) {
@@ -592,7 +610,7 @@ const [currentUser, setCurrentUser] = useState(() => {
                 <div style={styles.statValue}>{posts.length} 篇</div>
               </div>
               <div style={styles.statCard}>
-                <div style={styles.statTitle}>藍勾官方認證</div>
+                <div style={styles.statTitle}>官方認證</div>
                 <div style={styles.statValue}>{registeredUsers.filter(u => u.isVerified).length} 人</div>
               </div>
             </div>
@@ -607,7 +625,7 @@ const [currentUser, setCurrentUser] = useState(() => {
                     <th>Email 帳號</th>
                     <th>IP 與 國家/地區</th>
                     <th>管理員</th>
-                    <th>FB 藍勾</th>
+                    <th>藍勾</th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -636,7 +654,7 @@ const [currentUser, setCurrentUser] = useState(() => {
                           style={{ ...styles.toggleBtn, backgroundColor: user.isVerified ? '#0866ff' : '#334155' }}
                           onClick={() => toggleUserVerified(user.email)}
                         >
-                          {user.isVerified ? '🟦 已獲得藍勾' : '未認證'}
+                          {user.isVerified ? '🪪 已獲得認證' : '未認證'}
                         </button>
                       </td>
                       <td>
@@ -909,12 +927,12 @@ const [currentUser, setCurrentUser] = useState(() => {
                 </div>
               </div>
 
-              {/* 官方 FB 藍勾認證 */}
+              {/* 官方認證 */}
               <div style={styles.userCenterBox}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      官方藍勾認證 <FbVerifiedBadge size="16px" />
+                      官方認證 <FbVerifiedBadge size="16px" />
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                       {currentUser.isVerified 
